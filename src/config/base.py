@@ -91,10 +91,41 @@ def get_args(argv=None) -> argparse.Namespace:
     p.add_argument("--beta2_1d", type=float, default=0.95)
     p.add_argument("--weight_decay_1d", type=float, default=0.0)
 
+    # --- diffusion scheme (task-dependent) ---
+    p.add_argument("--diffusion", default="ddpm",
+                   choices=["ddpm", "flow_matching", "consistency",  # continuous (image)
+                            "mdlm", "udlm", "arm", "sedd"],          # discrete (text)
+                   help="Forward process / loss formulation for the chosen task.")
+
     # --- image_cifar10 task ---
+    p.add_argument("--model", default="unet2d",
+                   choices=["unet2d", "dit"],
+                   help="Architecture for image_cifar10.")
     p.add_argument("--num_diffusion_steps", type=int, default=1000)
     p.add_argument("--beta_schedule", default="linear",
                    choices=["linear", "scaled_linear", "squaredcos_cap_v2"])
+    p.add_argument("--fid_samples", type=int, default=0,
+                   help="If >0, compute FID with this many generated samples each eval. "
+                        "Requires torch-fidelity (`uv add torch-fidelity`).")
+    p.add_argument("--fid_steps", type=int, default=50,
+                   help="Number of DDIM/sampler steps for FID-time generation.")
+    # consistency training
+    p.add_argument("--ct_sigma_min", type=float, default=0.002)
+    p.add_argument("--ct_sigma_max", type=float, default=80.0)
+    p.add_argument("--ct_rho",       type=float, default=7.0)
+    p.add_argument("--ct_n_steps",   type=int,   default=18,
+                   help="Discretization of the sigma schedule for consistency training.")
+    p.add_argument("--ema_decay",    type=float, default=0.999)
+    # flow matching
+    p.add_argument("--fm_path", default="cond_ot",
+                   choices=["cond_ot"],
+                   help="Probability path for flow-matching loss.")
+
+    # DiT
+    p.add_argument("--dit_patch_size", type=int, default=2)
+    p.add_argument("--dit_hidden", type=int, default=384)
+    p.add_argument("--dit_depth", type=int, default=12)
+    p.add_argument("--dit_heads", type=int, default=6)
 
     # --- text_text8 task ---
     p.add_argument("--block_size", type=int, default=256,
@@ -104,7 +135,7 @@ def get_args(argv=None) -> argparse.Namespace:
     p.add_argument("--d_model", type=int, default=384)
     p.add_argument("--dropout", type=float, default=0.0)
     p.add_argument("--mdlm_eps", type=float, default=1e-3,
-                   help="Lower bound on mask probability t (avoids 1/t→inf at t=0)")
+                   help="Lower bound on mask/corruption probability t.")
 
     args = p.parse_args(argv)
     return args

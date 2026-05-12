@@ -74,6 +74,10 @@ class Trainer:
             optimizer.train()
 
         t_start = time.time()
+        t_prev = t_start
+        # reset cuda memory stats so peak_memory_mb is for the current run only
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
         nonfin = 0
         diverged = False
 
@@ -105,7 +109,13 @@ class Trainer:
 
             if self.iter_num % args.log_interval == 0:
                 opt_metrics = getattr(optimizer, "last_metrics", {}) or {}
+                now = time.time()
+                dt_iter = (now - t_prev) / max(1, args.log_interval)
+                t_prev = now
+                peak_mb = (torch.cuda.max_memory_allocated() / (1024 ** 2)
+                           if torch.cuda.is_available() else 0.0)
                 self._log("iter", iter=self.iter_num, loss=l, lr=lr,
+                          dt_iter_s=dt_iter, peak_mem_mb=peak_mb,
                           opt_metrics=opt_metrics, **log_dict)
 
             self.iter_num += 1

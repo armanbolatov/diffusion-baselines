@@ -1,10 +1,13 @@
 # diffusion-baselines
 
-Optimizer benchmark across diffusion tasks. Compares 11 optimizers on
-two task families: continuous image diffusion (CIFAR-10 / DDPM) and
-discrete text diffusion (text8 / MDLM).
+Optimizer benchmark across diffusion tasks, modeled after
+[epfml/llm-baselines](https://github.com/epfml/llm-baselines).
 
-Modeled after [epfml/llm-baselines](https://github.com/epfml/llm-baselines).
+Compares **11 optimizers** on **multiple diffusion formulations** across
+two task families:
+
+- **Continuous image diffusion** on CIFAR-10 — DDPM, Flow Matching, Consistency Training
+- **Discrete text diffusion** on text8 — MDLM, UDLM, SEDD, ARM (AR baseline)
 
 ## Quick start
 
@@ -13,7 +16,7 @@ Modeled after [epfml/llm-baselines](https://github.com/epfml/llm-baselines).
 uv sync
 
 # data prep (one time)
-uv run python -m src.data.text8         # downloads + tokenizes text8
+uv run python -m src.data.text8        # downloads + tokenizes text8
 
 # smoke tests
 bash scripts/smoke_image.sh
@@ -22,6 +25,8 @@ bash scripts/smoke_text.sh
 # single run
 uv run python -m src.main \
     --task image_cifar10 \
+    --diffusion ddpm \
+    --model unet2d \
     --optimizer mars \
     --lr 3e-4 \
     --max_iters 3000 \
@@ -31,9 +36,9 @@ uv run python -m src.main \
 bash scripts/sweep_v1.sh
 ```
 
-## Supported optimizers (v1)
+## Supported optimizers
 
-| family | name | CLI flag |
+| family | name | CLI |
 |---|---|---|
 | Adam family | AdamW | `--optimizer adamw` |
 | Adam family | Lion | `--optimizer lion` |
@@ -47,34 +52,98 @@ bash scripts/sweep_v1.sh
 | Schedule-free | Prodigy | `--optimizer prodigy` |
 | Classic | SGD + momentum | `--optimizer sgd` |
 
-## Tasks (v1)
+## Supported diffusion schemes
 
-- `image_cifar10` — continuous DDPM (ε-prediction MSE) with diffusers `UNet2DModel`, 17M params, 32×32 RGB.
-- `text_text8` — discrete diffusion (MDLM absorbing-state, weighted-CE) with a custom transformer (12L × d=384, AdaLN time-cond), char-level vocab.
+| family | name | CLI |
+|---|---|---|
+| Continuous (image) | DDPM (ε-prediction) | `--diffusion ddpm` |
+| Continuous (image) | Flow Matching (cond-OT) | `--diffusion flow_matching` |
+| Continuous (image) | Consistency Training | `--diffusion consistency` |
+| Discrete (text) | MDLM (absorbing) | `--diffusion mdlm` |
+| Discrete (text) | UDLM (uniform corruption) | `--diffusion udlm` |
+| Discrete (text) | SEDD (score-entropy) | `--diffusion sedd` |
+| Discrete (text) | ARM (AR baseline) | `--diffusion arm` |
+
+## Models
+
+| name | CLI | sizes |
+|---|---|---|
+| diffusers `UNet2DModel` | `--model unet2d` | ~17M params (CIFAR-32) |
+| DiT-S/2 | `--model dit` | ~30M params at default config |
+| Custom decoder-only transformer (AdaLN time-cond) | implicit for `text_text8` | ~30M params (12L × d=384) |
 
 ## Layout
 
 ```
 src/
-├── main.py             # entry point
-├── trainer.py          # task-agnostic train/eval loop
-├── config/base.py      # argparse spec
-├── tasks/              # one file per task
-├── models/             # one file per architecture
-├── data/               # one file per dataset
-├── diffusion/          # forward processes + samplers
-├── optim/              # one file per optimizer + dispatcher
-├── logger/             # JSONL + optional wandb
-└── utils/              # seed, exp_name, checkpoint
-scripts/                # smoke + sweep bash scripts
-tests/                  # pytest suite
-exps/                   # auto-generated run output (gitignored)
+├── main.py              # entry point
+├── trainer.py           # task-agnostic train/eval loop (logs dt_iter_s, peak_mem_mb)
+├── config/base.py       # argparse spec
+├── tasks/               # one file per task (image_cifar10, text_text8)
+├── models/              # one file per architecture (unet2d, dit, diff_transformer)
+├── data/                # one file per dataset (cifar10, text8) + tokenizer
+├── diffusion/           # forward processes + losses + samplers, one file per scheme
+│   ├── continuous.py    # DDPM scheduler wrapper
+│   ├── flow_matching.py
+│   ├── consistency.py
+│   ├── discrete.py      # dispatcher → mdlm | udlm | arm | sedd
+│   ├── mdlm.py / udlm.py / arm.py / sedd.py
+│   └── image_iters.py   # per-scheme batch iters for image tasks
+├── evaluation/fid.py    # CIFAR-10 FID via torchmetrics
+├── optim/               # one file per optimizer + dispatcher + param-split + schedule
+├── logger/              # JSONL + optional wandb
+└── utils/               # seed, exp_name, checkpoint, ema
+scripts/                 # smoke + sweep bash + analysis
+tests/                   # pytest suite
+exps/                    # auto-generated run output (gitignored)
 ```
 
-## Reproducing earlier MARS_M results
+## Logging
 
-Three parity checks (see `tests/test_parity.py` or `scripts/parity.sh`):
+Each run writes `exps/{auto_name}/log.jsonl`, one JSON per line, with an
+`event` field. Schemas:
 
-1. CIFAR-10 + AdamW + 3000 iters should reach eval MSE ≈ 0.039.
-2. CIFAR-10 + Muon + 3000 iters should reach eval MSE ≈ 0.032 (18% relative win over AdamW).
-3. CIFAR-10 + MARS-Adam + 3000 iters should match plain AdamW within seed noise.
+- `{"event":"config", "args":{...}}` — once at start
+- `{"event":"params", "optimizer":..., "n_params":..., "n_muon_params":...}` — once at start
+- `{"event":"iter", "iter":i, "loss":..., "lr":..., "dt_iter_s":..., "peak_mem_mb":..., "opt_metrics":{...}}` — every `--log_interval`
+- `{"event":"eval", "iter":i, "elapsed_s":..., "eval_loss":..., "diffusion":..., "fid":...?}` — every `--eval_interval`
+- `{"event":"final_eval", "iter":i, "eval_loss":..., ...}` — at end
+- `{"event":"diverged", "iter":i}` — only if non-finite for ≥50 consecutive iters
+
+If `--wandb` is passed, the same events are forwarded to W&B.
+
+## FID (optional)
+
+Pass `--fid_samples 2048 --fid_steps 50` to compute FID against a 2048-image
+CIFAR-10 train subset each eval. Requires `torch-fidelity` (`uv add torch-fidelity`).
+
+## Sweeping
+
+`scripts/sweep_v1.sh` runs 2 tasks × 11 optimizers × 3 seeds = 66 runs sequentially.
+`scripts/lr_tune.sh` runs a 5-LR scan per (task, optimizer) for picking sweep-time LRs.
+
+Both honor `DRY_RUN=1` to print commands without launching.
+
+## Tests
+
+```bash
+uv run pytest tests/ -q
+```
+
+Coverage:
+- All 11 optimizers instantiate + take one step on a toy net.
+- All 7 diffusion schemes execute a single loss step + backward.
+- DiT forward returns shape-matched output to UNet2D.
+- EMA helpers behave correctly.
+- `--dry_run` prints resolved config and exits 0.
+
+## Reference numbers (from sibling MARS_M experiments)
+
+For parity checks during development:
+
+1. `image_cifar10 --diffusion ddpm --optimizer adamw --lr 1e-4 --max_iters 3000`
+   → eval MSE ≈ **0.039**
+2. `image_cifar10 --diffusion ddpm --optimizer muon --lr 3e-4 --max_iters 3000`
+   → eval MSE ≈ **0.032** (18% relative win over AdamW)
+3. `image_cifar10 --diffusion ddpm --optimizer mars_adam --lr 1e-4 --max_iters 3000`
+   → eval MSE ≈ AdamW within seed noise
