@@ -1,0 +1,28 @@
+program: src/wandb_entrypoint.py
+method: grid
+metric:
+  name: eval_bpc
+  goal: minimize
+parameters:
+  task:                    {value: text_text8}
+  diffusion:               {value: mdlm}
+  optimizer:               {value: soap}
+  n_layer:                 {value: 4}
+  n_head:                  {value: 4}
+  d_model:                 {value: 128}
+  block_size:              {value: 256}
+  batch_size:              {value: 64}
+  max_iters:               {value: 1500}
+  schedule:                {value: wsd}
+  mdlm_eps:                {value: 1e-3}
+  dropout:                 {value: 0.0}
+  eps:                     {value: 1e-8}
+  seed:                    {value: 0}
+  weight_decay:            {values: [0, 0.1, 0.5]}
+  grad_clip:               {values: [0, 0.5, 1.0]}
+  warmup_iters:            {values: [100, 500]}
+  lr:                      {values: [1e-3, 3e-3, 1e-2]}
+  precondition_frequency:  {values: [10, 20, 50]}
+  # Sweep over (use argparse default of None) vs 0.95. ``null`` becomes
+  # Python None, which wandb_entrypoint.py drops from argv → SOAP falls back to default.
+  shampoo_beta:            {values: [null, 0.95]}

@@ -41,7 +41,7 @@ def get_args(argv=None) -> argparse.Namespace:
     # --- training horizon ---
     p.add_argument("--max_iters", type=int, default=3000)
     p.add_argument("--warmup_iters", type=int, default=200)
-    p.add_argument("--schedule", default="cosine", choices=["cosine", "constant"])
+    p.add_argument("--schedule", default="cosine", choices=["cosine", "constant", "wsd"])
     p.add_argument("--min_lr", type=float, default=0.0)
 
     # --- data ---
