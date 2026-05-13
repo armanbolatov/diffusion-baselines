@@ -37,6 +37,9 @@ def get_args(argv=None) -> argparse.Namespace:
                    help="torch.compile the model (slows first iter, faster afterwards)")
     p.add_argument("--dry_run", action="store_true",
                    help="Print resolved config and exit without training")
+    p.add_argument("--resume", action="store_true",
+                   help="Auto-load checkpoint from --out_dir if it exists. "
+                        "OFF by default to prevent sweep collisions.")
 
     # --- training horizon ---
     p.add_argument("--max_iters", type=int, default=3000)

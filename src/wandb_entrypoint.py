@@ -23,7 +23,7 @@ from src.main import main as run_main
 # bare ``--key`` flag (and skip it when false).
 BOOL_FLAGS = {
     "wandb", "compile", "dry_run", "nesterov", "optimize_1d",
-    "scale_parameter",
+    "scale_parameter", "resume",
 }
 
 

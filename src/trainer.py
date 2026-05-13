@@ -43,7 +43,12 @@ class Trainer:
         # state
         self.iter_num = 0
         self.ckpt_path = self.out_dir / "ckpt.pt"
-        self.iter_num = load_ckpt(self.ckpt_path, model, optimizer, device=args.device)
+        # Auto-resume only when --resume is set. Otherwise sweep agents
+        # could silently load a sibling-config's checkpoint and skip
+        # training entirely (the unique-hash exp_name should prevent this
+        # too, but belt-and-suspenders).
+        if getattr(args, "resume", False):
+            self.iter_num = load_ckpt(self.ckpt_path, model, optimizer, device=args.device)
 
     def _log(self, event: str, **fields):
         self.jsonl.log(event, **fields)

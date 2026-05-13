@@ -1,0 +1,29 @@
+program: src/wandb_entrypoint.py
+method: grid
+metric:
+  name: eval_bpc
+  goal: minimize
+parameters:
+  task:          {value: text_text8}
+  diffusion:     {value: mdlm}
+  optimizer:     {value: adamw}
+  # Medium model (~8M params)
+  n_layer:       {value: 8}
+  n_head:        {value: 8}
+  d_model:       {value: 256}
+  block_size:    {value: 256}
+  batch_size:    {value: 64}
+  # Longer training budget than Phase A
+  max_iters:     {value: 5000}
+  schedule:      {value: wsd}
+  mdlm_eps:      {value: 1e-3}
+  dropout:       {value: 0.0}
+  eps:           {value: 1e-8}
+  seed:          {value: 0}
+  # Locked from Phase A (universal winners across all 5 optimizers)
+  grad_clip:     {value: 0}
+  warmup_iters:  {value: 500}
+  # Tuned dims
+  weight_decay:  {values: [0, 0.1, 0.5]}
+  lr:            {values: [1e-4, 3e-4, 1e-3, 3e-3]}
+  betas_pair:    {values: [[0.9, 0.95], [0.9, 0.999], [0.95, 0.99]]}

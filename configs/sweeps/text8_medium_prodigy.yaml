@@ -1,0 +1,26 @@
+program: src/wandb_entrypoint.py
+method: grid
+metric:
+  name: eval_bpc
+  goal: minimize
+parameters:
+  task:          {value: text_text8}
+  diffusion:     {value: mdlm}
+  optimizer:     {value: prodigy}
+  n_layer:       {value: 8}
+  n_head:        {value: 8}
+  d_model:       {value: 256}
+  block_size:    {value: 256}
+  batch_size:    {value: 64}
+  max_iters:     {value: 5000}
+  schedule:      {value: wsd}
+  mdlm_eps:      {value: 1e-3}
+  dropout:       {value: 0.0}
+  eps:           {value: 1e-8}
+  seed:          {value: 0}
+  grad_clip:     {value: 0}
+  warmup_iters:  {value: 500}
+  lr:            {value: 1.0}
+  weight_decay:  {values: [0, 0.1, 0.5]}
+  d_coef:        {values: [0.5, 1.0, 2.0]}
+  beta2:         {values: [0.99, 0.999]}
