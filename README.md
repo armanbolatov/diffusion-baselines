@@ -1,128 +1,136 @@
 # diffusion-baselines
 
-Optimizer benchmark across diffusion tasks, modeled after
-[epfml/llm-baselines](https://github.com/epfml/llm-baselines).
+Head-to-head benchmark of seven optimizers on two diffusion training tasks:
+**MDLM** (masked discrete diffusion language model) on text8, and **DDPM** on
+CelebA at 32x32.
 
-Compares **11 optimizers** on **multiple diffusion formulations** across
-two task families:
+## Optimizers
 
-- **Continuous image diffusion** on CIFAR-10 — DDPM, Flow Matching, Consistency Training
-- **Discrete text diffusion** on text8 — MDLM, UDLM, SEDD, ARM (AR baseline)
+| family | name | CLI | implementation |
+|---|---|---|---|
+| Adam-family | AdamW | `--optimizer adamw` | `torch.optim.AdamW` |
+| Adam-family | Lion | `--optimizer lion` | `lion-pytorch` |
+| Matrix preconditioner | Muon | `--optimizer muon` | hand-port |
+| Matrix preconditioner | SOAP | `--optimizer soap` | `pytorch-optimizer` |
+| Variance reduction | MARS | `--optimizer mars` | hand-port |
+| Variance reduction | MARS-M | `--optimizer mars_m` | hand-port |
+| Schedule-free | Schedule-Free AdamW | `--optimizer schedule_free` | `schedulefree` |
 
-## Quick start
+## Workflow
 
 ```bash
-# bootstrap env (uses uv)
+# bootstrap env
 uv sync
 
-# data prep (one time)
-uv run python -m src.data.text8        # downloads + tokenizes text8
+# one-time data prep for text8
+uv run python -m src.data.text8
 
-# smoke tests
-bash scripts/smoke_image.sh
-bash scripts/smoke_text.sh
+# generate the 14 sweep YAMLs (7 optimizers x 2 tasks)
+uv run python scripts/gen_sweep_yamls.py
 
-# single run
-uv run python -m src.main \
-    --task image_cifar10 \
-    --diffusion ddpm \
-    --model unet2d \
-    --optimizer mars \
-    --lr 3e-4 \
-    --max_iters 3000 \
-    --seed 0
+# tune one (task, optimizer) sweep on Weights & Biases
+uv run wandb sweep configs/sweeps/celeba_adamw.yaml
+uv run wandb agent <sweep_id>
 
-# full sweep (11 optimizers × 2 tasks × 3 seeds = 66 runs)
-bash scripts/sweep_v1.sh
+# tune all 7 CelebA sweeps in series (registers IDs, drains them, watchdog per sweep)
+bash scripts/run_celeba_phase.sh
+
+# 3-seed benchmark at the full budget
+uv run python scripts/benchmark_winners.py text8
+uv run python scripts/benchmark_winners.py celeba --iters 80000
+
+# plots
+uv run python scripts/plot_final.py             # mean curves + bar chart per task
+uv run python scripts/plot_tuning_curves.py     # tuning-winner training curve per optimizer
+
+# sample CelebA faces and compute FID from a benchmark checkpoint
+uv run python scripts/sample_celeba.py exps_bench/celeba/<opt>/<run>/ckpt.pt --n 16
+uv run python scripts/fid_celeba.py    exps_bench/celeba/<opt>/<run>/ckpt.pt --n 2048
 ```
 
-## Supported optimizers
+## Sweep design
 
-| family | name | CLI |
-|---|---|---|
-| Adam family | AdamW | `--optimizer adamw` |
-| Adam family | Lion | `--optimizer lion` |
-| Adam family | AdEMAMix | `--optimizer adema` |
-| Adam family | Adafactor | `--optimizer adafactor` |
-| Matrix preconditioner | Muon | `--optimizer muon` |
-| Matrix preconditioner | SOAP | `--optimizer soap` |
-| Variance reduction | MARS | `--optimizer mars` |
-| Variance reduction | MARS-Adam | `--optimizer mars_adam` |
-| Schedule-free | Schedule-Free AdamW | `--optimizer schedule_free` |
-| Schedule-free | Prodigy | `--optimizer prodigy` |
-| Classic | SGD + momentum | `--optimizer sgd` |
+Each YAML is a Bayesian sweep over a discrete grid: learning-rate ladder per
+optimizer (the ladder is centered per-family on values reported by the original
+authors), `weight_decay ∈ {0.01, 0.1, 0.3}`, `grad_clip ∈ {0, 1.0}`, plus
+optimizer-specific axes (β1, β2 for Adam-family; momentum for Muon and MARS-M;
+γ for MARS / MARS-M; preconditioner update frequency for SOAP). The sweep agent
+runs up to 100 trials at a short proxy budget; the lowest-validation-metric
+trial is then re-trained at the full budget.
 
-## Supported diffusion schemes
+| task | proxy iters | full-budget iters | warmup | early-kill iter / threshold |
+|---|---:|---:|---:|---:|
+| MDLM (text) | 10000 | 30000 | 1000 | 3000 / 3.5 bpc |
+| CelebA-32 (DDPM) | 500 | 80000 | 100 | 200 / 0.5 MSE |
 
-| family | name | CLI |
-|---|---|---|
-| Continuous (image) | DDPM (ε-prediction) | `--diffusion ddpm` |
-| Continuous (image) | Flow Matching (cond-OT) | `--diffusion flow_matching` |
-| Continuous (image) | Consistency Training | `--diffusion consistency` |
-| Discrete (text) | MDLM (absorbing) | `--diffusion mdlm` |
-| Discrete (text) | UDLM (uniform corruption) | `--diffusion udlm` |
-| Discrete (text) | SEDD (score-entropy) | `--diffusion sedd` |
-| Discrete (text) | ARM (AR baseline) | `--diffusion arm` |
+Trials whose eval metric still exceeds the threshold at the early-kill iter are
+aborted to free the sweep budget for promising configurations. Mixed precision
+(bfloat16), a warmup-stable-decay learning-rate schedule with a 20% linear
+cooldown, and a non-finite-loss divergence guard are shared by both tasks.
 
-## Models
-
-| name | CLI | sizes |
-|---|---|---|
-| diffusers `UNet2DModel` | `--model unet2d` | ~17M params (CIFAR-32) |
-| DiT-S/2 | `--model dit` | ~30M params at default config |
-| Custom decoder-only transformer (AdaLN time-cond) | implicit for `text_text8` | ~30M params (12L × d=384) |
-
-## Layout
+## Folder layout
 
 ```
 src/
-├── main.py              # entry point
-├── trainer.py           # task-agnostic train/eval loop (logs dt_iter_s, peak_mem_mb)
-├── config/base.py       # argparse spec
-├── tasks/               # one file per task (image_cifar10, text_text8)
-├── models/              # one file per architecture (unet2d, dit, diff_transformer)
-├── data/                # one file per dataset (cifar10, text8) + tokenizer
-├── diffusion/           # forward processes + losses + samplers, one file per scheme
-│   ├── continuous.py    # DDPM scheduler wrapper
-│   ├── flow_matching.py
-│   ├── consistency.py
-│   ├── discrete.py      # dispatcher → mdlm | udlm | arm | sedd
-│   ├── mdlm.py / udlm.py / arm.py / sedd.py
-│   └── image_iters.py   # per-scheme batch iters for image tasks
-├── evaluation/fid.py    # CIFAR-10 FID via torchmetrics
-├── optim/               # one file per optimizer + dispatcher + param-split + schedule
-├── logger/              # JSONL + optional wandb
-└── utils/               # seed, exp_name, checkpoint, ema
-scripts/                 # smoke + sweep bash + analysis
-tests/                   # pytest suite
-exps/                    # auto-generated run output (gitignored)
+  main.py                    # CLI entry
+  trainer.py                 # task-agnostic train/eval loop (bf16 autocast, EMA, WSD)
+  config/base.py             # argparse spec
+  tasks/{image_celeba,text_text8}.py
+  data/{celeba,text8,tokenizer}.py
+  diffusion/{mdlm,continuous,image_iters,discrete,_common}.py
+  models/{unet2d,diff_transformer}.py
+  optim/{adamw,lion,muon,soap,schedule_free,mars,mars_m}.py + schedule.py
+  logger/{jsonl,wandb_logger}.py
+  utils/{exp_name,checkpoint,seed}.py
+  wandb_entrypoint.py        # bridges wandb sweep config -> argparse argv
+
+scripts/
+  gen_sweep_yamls.py         # writes the 14 configs/sweeps/*.yaml
+  run_celeba_phase.sh        # registers + drains 7 CelebA sweeps in series
+  run_celeba_80k.sh          # full 80k-iter bench chain for CelebA
+  benchmark_winners.py       # 3-seed retrain of each sweep winner at the full budget
+  continue_bench.py          # resume an existing bench run at a longer iter count
+  plot_final.py              # mean curves + bar chart per task
+  plot_tuning_curves.py      # training-loss curve per optimizer (sweep winners)
+  sample_celeba.py           # DDPM-1000 sample 16 faces from a ckpt
+  fid_celeba.py              # 2048-sample FID-2048 from a ckpt
+  smoke_text.sh              # short MDLM sanity check
+
+configs/sweeps/              # 14 wandb sweep YAMLs (regen via gen_sweep_yamls)
+tests/                       # pytest suite
+
+exps_tuning/<task>/<opt>/    # sweep trial outputs (one dir per trial)
+exps_bench/<task>/<opt>/     # 3-seed benchmark outputs (log.jsonl + ckpt.pt + ckpt_stable.pt)
+exps/{samples,final_plots,tuning_plots}/  # PNGs (gitignored)
 ```
 
 ## Logging
 
-Each run writes `exps/{auto_name}/log.jsonl`, one JSON per line, with an
-`event` field. Schemas:
+Every run writes `<out_dir>/log.jsonl` with one JSON event per line:
 
-- `{"event":"config", "args":{...}}` — once at start
-- `{"event":"params", "optimizer":..., "n_params":..., "n_muon_params":...}` — once at start
-- `{"event":"iter", "iter":i, "loss":..., "lr":..., "dt_iter_s":..., "peak_mem_mb":..., "opt_metrics":{...}}` — every `--log_interval`
-- `{"event":"eval", "iter":i, "elapsed_s":..., "eval_loss":..., "diffusion":..., "fid":...?}` — every `--eval_interval`
-- `{"event":"final_eval", "iter":i, "eval_loss":..., ...}` — at end
-- `{"event":"diverged", "iter":i}` — only if non-finite for ≥50 consecutive iters
+- `config` — args namespace, once at start
+- `params` — optimizer name + parameter counts
+- `iter` — every `--log_interval`: loss, lr, dt_iter_s, peak_mem_mb
+- `eval` / `final_eval` — every `--eval_interval`: eval metric (`eval_bpc` for MDLM, `eval_loss` for CelebA)
+- `early_killed` — when killed by `--kill_if_above`
+- `diverged` — when the loss is non-finite for an extended interval
 
-If `--wandb` is passed, the same events are forwarded to W&B.
+With `--wandb` the same events are forwarded to Weights & Biases.
 
-## FID (optional)
+## Checkpointing
 
-Pass `--fid_samples 2048 --fid_steps 50` to compute FID against a 2048-image
-CIFAR-10 train subset each eval. Requires `torch-fidelity` (`uv add torch-fidelity`).
+The trainer writes `ckpt.pt` (the latest state) and `ckpt_stable.pt` (a single
+snapshot captured at the boundary of the WSD stable-and-decay phases). The
+stable checkpoint lets a future run extend training at a new total iteration
+count without a learning-rate discontinuity at the resume point. For
+Schedule-Free, the trainer toggles the optimizer into its eval (running
+average) mode before saving so the saved weights can be used for inference
+without reconstructing the optimizer state.
 
-## Sweeping
-
-`scripts/sweep_v1.sh` runs 2 tasks × 11 optimizers × 3 seeds = 66 runs sequentially.
-`scripts/lr_tune.sh` runs a 5-LR scan per (task, optimizer) for picking sweep-time LRs.
-
-Both honor `DRY_RUN=1` to print commands without launching.
+For sampling and FID, the scripts default to the **raw** (final-iter) weights
+rather than the EMA, because the EMA at decay 0.9999 keeps a non-trivial
+trajectory-average bias at iteration counts well below the paper-scale 800k.
+Pass `--ema` to the sampler to override.
 
 ## Tests
 
@@ -130,20 +138,20 @@ Both honor `DRY_RUN=1` to print commands without launching.
 uv run pytest tests/ -q
 ```
 
-Coverage:
-- All 11 optimizers instantiate + take one step on a toy net.
-- All 7 diffusion schemes execute a single loss step + backward.
-- DiT forward returns shape-matched output to UNet2D.
-- EMA helpers behave correctly.
-- `--dry_run` prints resolved config and exits 0.
+Coverage: every optimizer instantiates and takes a step on a tiny model; the
+discrete diffusion scheme runs one forward + backward; `--dry_run` resolves a
+valid config and exits cleanly.
 
-## Reference numbers (from sibling MARS_M experiments)
+## Reproducibility
 
-For parity checks during development:
-
-1. `image_cifar10 --diffusion ddpm --optimizer adamw --lr 1e-4 --max_iters 3000`
-   → eval MSE ≈ **0.039**
-2. `image_cifar10 --diffusion ddpm --optimizer muon --lr 3e-4 --max_iters 3000`
-   → eval MSE ≈ **0.032** (18% relative win over AdamW)
-3. `image_cifar10 --diffusion ddpm --optimizer mars_adam --lr 1e-4 --max_iters 3000`
-   → eval MSE ≈ AdamW within seed noise
+- Each trial's output directory is named
+  `<task>_<opt>_lr<...>_wd<...>_seed<...>_iters<...>_<8-char-hash>`,
+  where the hash covers every tuned axis to guarantee unique directories
+  across sibling sweep trials.
+- Sweep IDs are minted by `wandb sweep` and persisted locally so that a
+  re-run of the phase script resumes the same sweeps rather than minting
+  fresh ones.
+- Checkpoints (`*.pt`) are not committed to the repository (see
+  `.gitignore`). The `log.jsonl` files under `exps_bench/` and
+  `exps_tuning/` retain every iteration's loss and metric and are
+  sufficient to reproduce all plots in the writeup.

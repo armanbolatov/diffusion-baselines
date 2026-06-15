@@ -45,5 +45,5 @@ class TextText8(DiffusionTask):
 
     def eval_step(self, model, eval_iter, n_batches) -> Dict[str, float]:
         bpc = self._scheme.eval_bpc(model, eval_iter, n_batches=n_batches,
-                                    n_t_grid=16, eps=self._eps, device=self._device)
+                                    n_mc=32, eps=self._eps, device=self._device)
         return {"eval_bpc": float(bpc), "diffusion": self._scheme.SCHEME}

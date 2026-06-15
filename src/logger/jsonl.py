@@ -1,9 +1,4 @@
-"""Event-typed JSONL logger.
-
-Single file per run: ``{out_dir}/log.jsonl``. Each line is a JSON object with
-an ``event`` field discriminating among config / params / iter / eval /
-sample / final_eval / diverged.
-"""
+"""Event-typed JSONL logger writing one ``log.jsonl`` per run."""
 import json
 from pathlib import Path
 from typing import Any, Dict
@@ -14,7 +9,6 @@ class JsonlLogger:
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         self.path = out_dir / "log.jsonl"
-        # line-buffered so logs flush as runs progress
         self.f = open(self.path, "a", buffering=1)
 
     def log(self, event: str, **fields: Any) -> None:
@@ -36,7 +30,6 @@ class JsonlLogger:
 
 
 def _default(o):
-    # numpy / torch numbers
     try:
         import numpy as np
         if isinstance(o, (np.integer, np.floating)):

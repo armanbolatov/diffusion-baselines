@@ -1,0 +1,18 @@
+{"event": "config", "args": {"task": "image_celeba", "optimizer": "schedule_free", "diffusion": "ddpm", "out_dir": null, "exp_root": "exps_tuning/celeba/schedule_free", "log_interval": 50, "eval_interval": 100, "eval_batches": 10, "wandb": true, "wandb_project": "diffusion-baselines", "device": "cuda", "seed": 0, "compile": false, "dry_run": false, "resume": false, "save_ckpt": false, "ema_decay": 0.0, "kill_at_iter": 200, "kill_if_above": 0.5, "max_iters": 500, "warmup_iters": 0, "schedule": "constant", "min_lr": 0.0, "data_dir": "data", "batch_size": 256, "eval_batch_size": 128, "num_workers": 2, "lr": 0.0001, "weight_decay": 0.3, "beta1": 0.9, "beta2": 0.999, "eps": 1e-08, "grad_clip": 1.0, "precondition_frequency": 10, "max_precondition_dim": 10000, "shampoo_beta": null, "momentum": 0.9, "nesterov": false, "ns_steps": 5, "gamma": 0.025, "num_diffusion_steps": 1000, "beta_schedule": "linear", "block_size": 256, "n_layer": 12, "n_head": 6, "d_model": 384, "dropout": 0.0, "mdlm_eps": 0.001}}
+{"event": "params", "optimizer": "schedule_free", "lr": 0.0001, "n_params": 38710851}
+{"event": "iter", "iter": 0, "loss": 1.1402831077575684, "lr": 0.0001, "dt_iter_s": 0.01983776569366455, "peak_mem_mb": 7433.4365234375, "opt_metrics": {}}
+{"event": "iter", "iter": 50, "loss": 0.10677862167358398, "lr": 0.0001, "dt_iter_s": 0.19899633884429932, "peak_mem_mb": 7750.421875, "opt_metrics": {}}
+{"event": "eval", "iter": 100, "elapsed_s": 23.229976415634155, "eval_loss": 0.07792539894580841, "diffusion": "ddpm"}
+{"event": "iter", "iter": 100, "loss": 0.08060349524021149, "lr": 0.0001, "dt_iter_s": 0.24769360542297364, "peak_mem_mb": 7750.421875, "opt_metrics": {}}
+{"event": "iter", "iter": 150, "loss": 0.05967628210783005, "lr": 0.0001, "dt_iter_s": 0.20188435077667236, "peak_mem_mb": 7750.421875, "opt_metrics": {}}
+{"event": "eval", "iter": 200, "elapsed_s": 45.306408166885376, "eval_loss": 0.05469388887286186, "diffusion": "ddpm"}
+{"event": "iter", "iter": 200, "loss": 0.04556881636381149, "lr": 0.0001, "dt_iter_s": 0.23965067386627198, "peak_mem_mb": 7750.421875, "opt_metrics": {}}
+{"event": "iter", "iter": 250, "loss": 0.051696911454200745, "lr": 0.0001, "dt_iter_s": 0.20188517093658448, "peak_mem_mb": 7750.421875, "opt_metrics": {}}
+{"event": "eval", "iter": 300, "elapsed_s": 67.290358543396, "eval_loss": 0.05375138819217682, "diffusion": "ddpm"}
+{"event": "iter", "iter": 300, "loss": 0.0626455694437027, "lr": 0.0001, "dt_iter_s": 0.23781507968902588, "peak_mem_mb": 7750.421875, "opt_metrics": {}}
+{"event": "iter", "iter": 350, "loss": 0.04554307088255882, "lr": 0.0001, "dt_iter_s": 0.2029628324508667, "peak_mem_mb": 7750.421875, "opt_metrics": {}}
+{"event": "eval", "iter": 400, "elapsed_s": 89.54511833190918, "eval_loss": 0.04359161369502544, "diffusion": "ddpm"}
+{"event": "iter", "iter": 400, "loss": 0.04519377276301384, "lr": 0.0001, "dt_iter_s": 0.24213043689727784, "peak_mem_mb": 7750.421875, "opt_metrics": {}}
+{"event": "iter", "iter": 450, "loss": 0.05051951855421066, "lr": 0.0001, "dt_iter_s": 0.2018335723876953, "peak_mem_mb": 7750.421875, "opt_metrics": {}}
+{"event": "eval", "iter": 500, "elapsed_s": 111.95864391326904, "eval_loss": 0.04105715472251177, "diffusion": "ddpm"}
+{"event": "final_eval", "iter": 500, "elapsed_s": 113.58253145217896, "eval_loss": 0.04398886859416962, "diffusion": "ddpm"}

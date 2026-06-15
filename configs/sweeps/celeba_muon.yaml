@@ -1,0 +1,61 @@
+program: src/wandb_entrypoint.py
+method: bayes
+run_cap: 100
+metric:
+  name: eval_loss
+  goal: minimize
+parameters:
+  warmup_iters:
+    value: 100
+  schedule:
+    value: wsd
+  batch_size:
+    value: 256
+  eps:
+    value: 1.0e-08
+  seed:
+    value: 0
+  task:
+    value: image_celeba
+  diffusion:
+    value: ddpm
+  optimizer:
+    value: muon
+  max_iters:
+    value: 500
+  eval_interval:
+    value: 100
+  num_diffusion_steps:
+    value: 1000
+  beta_schedule:
+    value: linear
+  dropout:
+    value: 0.0
+  exp_root:
+    value: exps_tuning/celeba/muon
+  kill_at_iter:
+    value: 200
+  kill_if_above:
+    value: 0.5
+  ns_steps:
+    value: 5
+  lr:
+    values:
+    - 1.0e-05
+    - 3.0e-05
+    - 0.0001
+    - 0.0003
+  weight_decay:
+    values:
+    - 0.01
+    - 0.1
+    - 0.3
+  momentum:
+    values:
+    - 0.9
+    - 0.95
+    - 0.99
+  grad_clip:
+    values:
+    - 0
+    - 1.0

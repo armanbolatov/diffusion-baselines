@@ -26,5 +26,4 @@ class DiffusionTask(ABC):
     def eval_step(self, model, eval_iter, n_batches: int) -> Dict[str, float]: ...
 
     def sample(self, model, args, iter_num: int, out_dir) -> None:
-        # default: no-op
         return None

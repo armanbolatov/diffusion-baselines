@@ -5,7 +5,6 @@ import sys
 import torch
 
 from .config.base import get_args
-from .logger.jsonl import JsonlLogger  # only for --dry_run
 from .optim import build_optimizer
 from .tasks import get_task
 from .trainer import Trainer
@@ -23,24 +22,14 @@ def main(argv=None) -> int:
         print(json.dumps(vars(args), indent=2))
         return 0
 
-    # device
     device = torch.device(args.device)
-
-    # task
     task = get_task(args)
-
-    # model
     model = task.build_model(args).to(device)
     if args.compile:
         model = torch.compile(model)
-
-    # data
     train_iter, eval_iter = task.build_data(args)
-
-    # optimizer
     optimizer, opt_summary = build_optimizer(args, model)
 
-    # train
     trainer = Trainer(args, task, model, optimizer, opt_summary,
                       train_iter, eval_iter, out_dir)
     trainer.run()
