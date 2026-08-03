@@ -1,0 +1,58 @@
+run_cap: 100
+metric:
+  name: eval_loss
+  goal: minimize
+parameters:
+  task:
+    value: image_celeba
+  diffusion:
+    value: ddpm
+  image_size:
+    value: 64
+  batch_size:
+    value: 128
+  num_diffusion_steps:
+    value: 1000
+  beta_schedule:
+    value: linear
+  dropout:
+    value: 0.1
+  eps:
+    value: 1.0e-08
+  ema_eval:
+    value: 1
+  schedule:
+    value: wsd
+  eval_interval:
+    value: 1000
+  max_iters:
+    value: 20000
+  warmup_iters:
+    value: 2000
+  kill_at_iter:
+    value: 0
+  kill_if_above:
+    value: 0
+  seed:
+    value: 0
+  grad_clip:
+    values:
+    - 0
+    - 1.0
+  weight_decay:
+    values:
+    - 0.0
+    - 0.01
+    - 0.1
+    - 0.3
+    - 1.0
+  lr:
+    values:
+    - 1.0e-05
+    - 3.0e-05
+    - 0.0001
+    - 0.0003
+    - 0.001
+    - 0.003
+    - 0.01
+    - 0.03

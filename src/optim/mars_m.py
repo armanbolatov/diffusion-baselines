@@ -1,6 +1,4 @@
-"""MARS-M: MARS variance-reduction applied to Muon (matrix-level).
-
-Ported from ~/MARS/MARS_M/optimizers/mars_m.py (arXiv:2510.21800).
+"""MARS-M: MARS variance-reduction applied to Muon (matrix-level; arXiv:2510.21800).
 
 For matrix-valued parameters:
   c_t = (g - last_grad) * (gamma * mu / (1-mu)) + g     # variance-reduced grad
@@ -23,6 +21,11 @@ Notes:
 import math
 
 import torch
+import torch._dynamo
+
+# Fall back to eager if torch.compile's backend can't build (e.g. CPU inductor
+# or a torch version mismatch) instead of crashing the run.
+torch._dynamo.config.suppress_errors = True
 
 
 @torch.compile
@@ -46,11 +49,12 @@ class MARS_M(torch.optim.Optimizer):
     def __init__(self, muon_params, adamw_params=None,
                  lr=1e-3, wd=0.1,
                  momentum=0.95, ns_steps=5,
-                 adamw_betas=(0.9, 0.95), adamw_eps=1e-8,
+                 adamw_lr=None, adamw_betas=(0.9, 0.95), adamw_eps=1e-8,
                  gamma=0.025, clip_c=False):
         mars_factor = gamma * momentum / (1 - momentum)
         defaults = dict(
             lr=lr, wd=wd, momentum=momentum, ns_steps=ns_steps,
+            adamw_lr=lr if adamw_lr is None else adamw_lr,
             adamw_betas=adamw_betas, adamw_eps=adamw_eps,
             gamma=gamma, mars_factor=mars_factor, clip_c=clip_c,
         )
@@ -105,6 +109,7 @@ class MARS_M(torch.optim.Optimizer):
             # ---- AdamW backup (1D / embedding params) ----
             adamw_params = [p for p in group["params"]
                             if not self.state[p].get("use_muon", False)]
+            alr = group["adamw_lr"]
             beta1, beta2 = group["adamw_betas"]
             eps = group["adamw_eps"]
             for p in adamw_params:
@@ -125,6 +130,6 @@ class MARS_M(torch.optim.Optimizer):
                 bc1 = 1 - beta1 ** step
                 bc2 = 1 - beta2 ** step
                 scale = bc1 / (bc2 ** 0.5)
-                p.data.mul_(1 - lr * wd)
-                p.data.add_(num, alpha=-lr / scale)
+                p.data.mul_(1 - alr * wd)
+                p.data.add_(num, alpha=-alr / scale)
         return loss

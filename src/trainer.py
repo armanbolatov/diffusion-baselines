@@ -23,10 +23,6 @@ class Trainer:
         self.out_dir.mkdir(parents=True, exist_ok=True)
 
         self.jsonl = JsonlLogger(self.out_dir)
-        self.wandb_logger = None
-        if args.wandb:
-            from .logger.wandb_logger import WandbLogger
-            self.wandb_logger = WandbLogger(args, exp_name=self.out_dir.name)
 
         self._lr_fn = build_schedule(args.schedule)
         # Schedule-Free maintains its own running-average weights and ignores the LR schedule.
@@ -49,8 +45,6 @@ class Trainer:
 
     def _log(self, event: str, **fields):
         self.jsonl.log(event, **fields)
-        if self.wandb_logger is not None:
-            self.wandb_logger.log(event, **fields)
 
     def _set_lr(self) -> float:
         if self._is_schedulefree:
@@ -77,6 +71,7 @@ class Trainer:
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats()
         nonfin = 0
+        best_loss = float("inf")
         diverged = False
 
         while self.iter_num < args.max_iters:
@@ -89,10 +84,17 @@ class Trainer:
                 batch = next(self.train_iter)
 
             optimizer.zero_grad(set_to_none=True)
-            with torch.amp.autocast("cuda", dtype=torch.bfloat16,
-                                    enabled=torch.cuda.is_available()):
-                loss, log_dict = self.task.loss_step(model, batch, self.iter_num)
-            loss.backward()
+            # grad_accum > 1 splits the batch into micro-batches (same effective
+            # batch, lower peak memory — needed for DUO's (B, L, V) latents).
+            accum = max(1, getattr(args, "grad_accum", 1))
+            chunks = batch.chunk(accum) if accum > 1 else (batch,)
+            loss = 0.0
+            for chunk in chunks:
+                with torch.amp.autocast("cuda", dtype=torch.bfloat16,
+                                        enabled=torch.cuda.is_available()):
+                    chunk_loss, log_dict = self.task.loss_step(model, chunk, self.iter_num)
+                (chunk_loss / len(chunks)).backward()
+                loss = loss + chunk_loss.detach() / len(chunks)
             if args.grad_clip > 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
             optimizer.step()
@@ -103,7 +105,13 @@ class Trainer:
                         self.ema_state[k].mul_(self.ema_decay).add_(v, alpha=1 - self.ema_decay)
 
             l = float(loss.detach())
-            if not (l == l and abs(l) < 1e9):
+            finite = (l == l and abs(l) < 1e9)
+            if finite and l < best_loss:
+                best_loss = l
+            # Early stop on divergence: loss is non-finite, or has exploded far
+            # above the best seen (e.g. too-high LR) and stayed there ~50 iters.
+            exploded = finite and best_loss < float("inf") and l > 5.0 * best_loss + 1.0
+            if (not finite) or exploded:
                 nonfin += 1
                 if nonfin >= 50:
                     diverged = True
@@ -121,6 +129,8 @@ class Trainer:
                 self._log("iter", iter=self.iter_num, loss=l, lr=lr,
                           dt_iter_s=dt_iter, peak_mem_mb=peak_mb,
                           opt_metrics=opt_metrics, **log_dict)
+                print(f"  iter {self.iter_num:>6} | loss {l:7.4f} | lr {lr:.2e}",
+                      flush=True)
 
             self.iter_num += 1
 
@@ -141,8 +151,6 @@ class Trainer:
             self._log("diverged", iter=self.iter_num)
 
         self.jsonl.close()
-        if self.wandb_logger is not None:
-            self.wandb_logger.close()
 
     def _eval_and_checkpoint(self, t_start, final: bool = False):
         model = self.model
@@ -150,9 +158,16 @@ class Trainer:
         if self._is_schedulefree:
             opt.eval()
         model.eval()
+        # optionally eval/sample from EMA weights (much better DDPM FID); restore after
+        ema_swap = getattr(self.args, "ema_eval", 0) and self.ema_state is not None
+        if ema_swap:
+            raw = {k: v.detach().clone() for k, v in model.state_dict().items()}
+            model.load_state_dict(self.ema_state)
         with torch.no_grad(), torch.amp.autocast("cuda", dtype=torch.bfloat16,
                                                  enabled=torch.cuda.is_available()):
             metrics = self.task.eval_step(model, self.eval_iter, self.args.eval_batches)
+        if ema_swap:
+            model.load_state_dict(raw)
         model.train()
         if self._is_schedulefree:
             opt.train()
@@ -160,6 +175,9 @@ class Trainer:
         event = "final_eval" if final else "eval"
         self._log(event, iter=self.iter_num,
                   elapsed_s=time.time() - t_start, **metrics)
+        summary = "  ".join(f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}"
+                            for k, v in metrics.items())
+        print(f"  [eval @ {self.iter_num}] {summary}", flush=True)
         if getattr(self.args, "save_ckpt", False):
             # Schedule-Free needs eval-mode weights snapshotted so the saved ckpt is
             # usable for sampling without reconstructing the optimizer state.

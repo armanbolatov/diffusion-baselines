@@ -4,7 +4,7 @@ For each exps_bench/<task>/<opt>/<run-dir>/ that has ckpt.pt, re-launch src.main
 with the SAME config from log.jsonl but max_iters=NEW_MAX (only if NEW_MAX > current iter_num).
 
 Usage:
-    uv run python scripts/continue_bench.py celeba 80000
+    uv run python scripts/continue_bench.py celeba64 100000
 """
 import json
 import subprocess
@@ -45,8 +45,6 @@ def _argv(cfg, new_max, out_dir, task):
         "--eval_batches", str(cfg.get("eval_batches", 5)),
         "--out_dir", str(out_dir),
         "--save_ckpt", "--resume",
-        "--wandb",
-        "--wandb_project", f"diffusion-baselines-bench-{task}",
     ]
     return argv
 

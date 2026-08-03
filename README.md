@@ -1,8 +1,13 @@
 # diffusion-baselines
 
-Head-to-head benchmark of seven optimizers on two diffusion training tasks:
-**MDLM** (masked discrete diffusion language model) on text8, and **DDPM** on
-CelebA at 32x32.
+Head-to-head benchmark of seven optimizers across four diffusion training tasks —
+one per diffusion paradigm:
+
+- **text8** — MDLM (masked/absorbing discrete diffusion), character-level
+- **QM9** — UDLM (uniform-state discrete diffusion; Schiff et al. 2024), SMILES
+- **CelebA-64** — DDPM (Gaussian diffusion; Ho et al. 2020) on 64x64 face images
+- **LM1B** — DUO (uniform-state diffusion trained through its Gaussian dual;
+  Sahoo et al. 2025), bert-base-uncased tokenizer, context 128
 
 ## Optimizers
 
@@ -19,118 +24,119 @@ CelebA at 32x32.
 ## Workflow
 
 ```bash
-# bootstrap env
-uv sync
+uv sync                                     # bootstrap (torch pinned to cu121)
 
-# one-time data prep for text8
+# one-time data prep (celeba downloads itself on first run)
 uv run python -m src.data.text8
+uv run python -m src.data.qm9  --block_size 32
+uv run python -m src.data.lm1b --block_size 128
 
-# generate the 14 sweep YAMLs (7 optimizers x 2 tasks)
-uv run python scripts/gen_sweep_yamls.py
+# tune all 7 optimizers for one task on one GPU (Optuna, resumable)
+bash scripts/tune.sh <gpu> <task>           # task: qm9 | text8 | celeba64 | lm1b
+# -> logs/tune_<task>_winners.json
 
-# tune one (task, optimizer) sweep on Weights & Biases
-uv run wandb sweep configs/sweeps/celeba_adamw.yaml
-uv run wandb agent <sweep_id>
+# retrain the winners at the full budget (one seed by default; add more anytime)
+bash scripts/benchmark.sh <gpu> <task>
+bash scripts/benchmark.sh <gpu> <task> --seeds 42 69 1337   # finished seeds are skipped
+bash scripts/benchmark.sh <gpu> celeba64 --fid_n 1024       # log in-training FID (celeba64)
 
-# tune all 7 CelebA sweeps in series (registers IDs, drains them, watchdog per sweep)
-bash scripts/run_celeba_phase.sh
+# plots (read local log.jsonl; no network)
+uv run python scripts/compute_flops.py      # -> logs/flops.json (per-optimizer FLOPs/iter)
+uv run python scripts/plot_final.py qm9     # per-task: metric vs iter, vs FLOPs, final bar
+uv run python scripts/plot_grid.py          # all tasks in one figure + summary table
+uv run python scripts/plot_scatter.py       # FLOPs vs memory, colored by final metric
 
-# 3-seed benchmark at the full budget
-uv run python scripts/benchmark_winners.py text8
-uv run python scripts/benchmark_winners.py celeba --iters 80000
-
-# plots
-uv run python scripts/plot_final.py             # mean curves + bar chart per task
-uv run python scripts/plot_tuning_curves.py     # tuning-winner training curve per optimizer
-
-# sample CelebA faces and compute FID from a benchmark checkpoint
-uv run python scripts/sample_celeba.py exps_bench/celeba/<opt>/<run>/ckpt.pt --n 16
-uv run python scripts/fid_celeba.py    exps_bench/celeba/<opt>/<run>/ckpt.pt --n 2048
+# generative scores from a benchmark checkpoint
+uv run python scripts/fid_celeba.py exps_bench/celeba64/<opt>/seed42/ckpt.pt --n 50000 --size 64
+uv run python scripts/sample_qm9.py exps_bench/qm9/<opt>/seed42/ckpt.pt --n 1000
 ```
 
-## Sweep design
+## Running in parallel
 
-Each YAML is a Bayesian sweep over a discrete grid: learning-rate ladder per
-optimizer (the ladder is centered per-family on values reported by the original
-authors), `weight_decay ∈ {0.01, 0.1, 0.3}`, `grad_clip ∈ {0, 1.0}`, plus
-optimizer-specific axes (β1, β2 for Adam-family; momentum for Muon and MARS-M;
-γ for MARS / MARS-M; preconditioner update frequency for SOAP). The sweep agent
-runs up to 100 trials at a short proxy budget; the lowest-validation-metric
-trial is then re-trained at the full budget.
+The tune and benchmark jobs are fully independent — one per (task, optimizer) for
+tuning, one per (task, optimizer, seed) for benchmarking — so they spread across as
+many GPUs as you have. `scripts/run_fleet.py` dispatches them: one thread per GPU
+pulls the next job from a queue and pins it with `CUDA_VISIBLE_DEVICES`, running the
+tune phase first, then the benchmark phase. It is resumable (the tuner resumes each
+study; the benchmark skips finished seeds), so re-running the same command continues
+where it stopped. Per-job logs land in `logs/fleet/`.
 
-| task | proxy iters | full-budget iters | warmup | early-kill iter / threshold |
-|---|---:|---:|---:|---:|
-| MDLM (text) | 10000 | 30000 | 1000 | 3000 / 3.5 bpc |
-| CelebA-32 (DDPM) | 500 | 80000 | 100 | 200 / 0.5 MSE |
+```bash
+# whole pipeline across every GPU on the machine
+uv run python scripts/run_fleet.py --gpus 0 1 2 3 4 5 6 7
 
-Trials whose eval metric still exceeds the threshold at the early-kill iter are
-aborted to free the sweep budget for promising configurations. Mixed precision
-(bfloat16), a warmup-stable-decay learning-rate schedule with a 20% linear
-cooldown, and a non-finite-loss divergence guard are shared by both tasks.
+# just tuning, or just one task
+uv run python scripts/run_fleet.py --gpus 0 1 2 3 --phase tune
+uv run python scripts/run_fleet.py --gpus 0 1 --tasks text8
+```
 
-## Folder layout
+More GPUs cut wall-clock, not total GPU-hours. Keep the same GPU type within a task
+so its wall-clock numbers stay comparable.
+
+## Tuning
+
+One [Optuna](https://optuna.org) study per (task, optimizer). The search space is the
+grid in `configs/<task>/{common,<opt>}.yaml` — shared learning rate, weight decay, and
+grad clip, plus optimizer-specific axes (`value:` = fixed, `values:` = swept). Trials
+run at a ~20% proxy budget with early pruning; each winner is then retrained at the
+full budget (`BENCH_ITERS` in `benchmark_winners.py`). Studies live in
+`optuna_db/optuna_<task>_<opt>.db` and resume on restart. Tuning selects on a cheap
+proxy metric (`eval_bpc` for text/molecules, denoising `eval_loss` for images); for
+CelebA the reported quality metric is FID, computed separately (see below).
+
+## Layout
 
 ```
 src/
-  main.py                    # CLI entry
-  trainer.py                 # task-agnostic train/eval loop (bf16 autocast, EMA, WSD)
+  main.py                    # CLI entry: dispatch by --task and --optimizer
+  trainer.py                 # task-agnostic train/eval loop (bf16, EMA, WSD, divergence guard)
   config/base.py             # argparse spec
-  tasks/{image_celeba,text_text8}.py
-  data/{celeba,text8,tokenizer}.py
-  diffusion/{mdlm,continuous,image_iters,discrete,_common}.py
+  tasks/{image_celeba,text_text8,text_lm1b,mol_qm9}.py
+  data/{celeba,text8,lm1b,qm9,tokenizer,mol_tokenizer}.py
+  diffusion/{mdlm,udlm,duo,discrete,continuous,image_iters}.py
   models/{unet2d,diff_transformer}.py
-  optim/{adamw,lion,muon,soap,schedule_free,mars,mars_m}.py + schedule.py
-  logger/{jsonl,wandb_logger}.py
-  utils/{exp_name,checkpoint,seed}.py
-  wandb_entrypoint.py        # bridges wandb sweep config -> argparse argv
+  optim/{adamw,lion,muon,soap,schedule_free,mars,mars_m}.py + schedule.py, param_groups.py
+  logger/jsonl.py
+  utils/{fid,exp_name,checkpoint,seed}.py
 
 scripts/
-  gen_sweep_yamls.py         # writes the 14 configs/sweeps/*.yaml
-  run_celeba_phase.sh        # registers + drains 7 CelebA sweeps in series
-  run_celeba_80k.sh          # full 80k-iter bench chain for CelebA
-  benchmark_winners.py       # 3-seed retrain of each sweep winner at the full budget
-  continue_bench.py          # resume an existing bench run at a longer iter count
-  plot_final.py              # mean curves + bar chart per task
-  plot_tuning_curves.py      # training-loss curve per optimizer (sweep winners)
-  sample_celeba.py           # DDPM-1000 sample 16 faces from a ckpt
-  fid_celeba.py              # 2048-sample FID-2048 from a ckpt
-  smoke_text.sh              # short MDLM sanity check
+  run_fleet.py                      # dispatch all tune+bench jobs across GPUs (parallel)
+  tune.sh / tune_local.py           # Optuna tuning over all 7 optimizers
+  benchmark.sh / benchmark_winners.py  # retrain winners at full budget (seed-outer)
+  compute_flops.py                  # per-optimizer FLOPs/iter -> logs/flops.json
+  plot_final.py / plot_grid.py / plot_scatter.py   # result figures
+  fid_celeba.py / sample_celeba.py / sample_qm9.py # generative metrics
+  repro_qm9.sh                      # paper-faithful single QM9/UDLM run
 
-configs/sweeps/              # 14 wandb sweep YAMLs (regen via gen_sweep_yamls)
-tests/                       # pytest suite
-
-exps_tuning/<task>/<opt>/    # sweep trial outputs (one dir per trial)
-exps_bench/<task>/<opt>/     # 3-seed benchmark outputs (log.jsonl + ckpt.pt + ckpt_stable.pt)
-exps/{samples,final_plots,tuning_plots}/  # PNGs (gitignored)
+configs/<task>/              # common.yaml + one <optimizer>.yaml each (value: fixed, values: swept)
+logs/tune_<task>_winners.json  # best config per optimizer (tuner -> benchmark)
+exps_bench/<task>/<opt>/seed<seed>/   # benchmark outputs (log.jsonl + ckpt.pt)
+exps/final_plots/            # figures (gitignored)
 ```
 
 ## Logging
 
-Every run writes `<out_dir>/log.jsonl` with one JSON event per line:
+Every run writes `<out_dir>/log.jsonl`, one JSON event per line:
 
-- `config` — args namespace, once at start
+- `config` — the args namespace, once at start
 - `params` — optimizer name + parameter counts
 - `iter` — every `--log_interval`: loss, lr, dt_iter_s, peak_mem_mb
-- `eval` / `final_eval` — every `--eval_interval`: eval metric (`eval_bpc` for MDLM, `eval_loss` for CelebA)
-- `early_killed` — when killed by `--kill_if_above`
-- `diverged` — when the loss is non-finite for an extended interval
+- `eval` / `final_eval` — every `--eval_interval`: the eval metric (`eval_bpc`,
+  `eval_loss`, and `eval_fid` for CelebA when `--fid_n > 0`)
+- `diverged` — when the loss goes non-finite or explodes far above its best
 
-With `--wandb` the same events are forwarded to Weights & Biases.
+`log.jsonl` is the single source of truth: tuning, benchmarking, and every plot
+read it. There is no external tracker.
 
-## Checkpointing
+## Checkpoints and EMA
 
-The trainer writes `ckpt.pt` (the latest state) and `ckpt_stable.pt` (a single
-snapshot captured at the boundary of the WSD stable-and-decay phases). The
-stable checkpoint lets a future run extend training at a new total iteration
-count without a learning-rate discontinuity at the resume point. For
-Schedule-Free, the trainer toggles the optimizer into its eval (running
-average) mode before saving so the saved weights can be used for inference
-without reconstructing the optimizer state.
-
-For sampling and FID, the scripts default to the **raw** (final-iter) weights
-rather than the EMA, because the EMA at decay 0.9999 keeps a non-trivial
-trajectory-average bias at iteration counts well below the paper-scale 800k.
-Pass `--ema` to the sampler to override.
+The trainer writes `ckpt.pt` (latest state, including the EMA weights) and
+`ckpt_stable.pt` (a snapshot at the WSD stable/decay boundary, so training can be
+extended without a learning-rate discontinuity). With `--ema_eval 1` the trainer
+evaluates and samples from the EMA weights (decay `--ema_decay`), which is what
+gives stable, low DDPM FID; `scripts/fid_celeba.py` also samples from the EMA
+weights when present. For Schedule-Free, the trainer switches the optimizer into
+its averaged-iterate mode around evaluation and checkpointing.
 
 ## Tests
 
@@ -138,20 +144,6 @@ Pass `--ema` to the sampler to override.
 uv run pytest tests/ -q
 ```
 
-Coverage: every optimizer instantiates and takes a step on a tiny model; the
-discrete diffusion scheme runs one forward + backward; `--dry_run` resolves a
-valid config and exits cleanly.
-
-## Reproducibility
-
-- Each trial's output directory is named
-  `<task>_<opt>_lr<...>_wd<...>_seed<...>_iters<...>_<8-char-hash>`,
-  where the hash covers every tuned axis to guarantee unique directories
-  across sibling sweep trials.
-- Sweep IDs are minted by `wandb sweep` and persisted locally so that a
-  re-run of the phase script resumes the same sweeps rather than minting
-  fresh ones.
-- Checkpoints (`*.pt`) are not committed to the repository (see
-  `.gitignore`). The `log.jsonl` files under `exps_bench/` and
-  `exps_tuning/` retain every iteration's loss and metric and are
-  sufficient to reproduce all plots in the writeup.
+Every optimizer instantiates and takes a step on a tiny model; each discrete
+diffusion scheme runs a forward/backward and a sampling/eval smoke; `--dry_run`
+resolves a valid config and exits cleanly.

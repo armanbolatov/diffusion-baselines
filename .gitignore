@@ -7,9 +7,15 @@ __pycache__/
 # uv / venv
 .venv/
 
-# data and experiments
-exps/
-data/
+# data and experiments (anchored to repo root so src/data/ source is tracked)
+/exps/
+/data/
+/exps_tuning/
+/exps_bench/
+/exps_transfer/
+/arxiv/
+optuna_db/
+optuna_*.db
 *.bin
 *.zip
 
@@ -23,9 +29,8 @@ data/
 
 # misc
 .DS_Store
-
-# W&B local cache (runs already synced to cloud)
 wandb/
+CLAUDE.md
 
 # Local logs
 logs/

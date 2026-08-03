@@ -1,4 +1,4 @@
-"""Learning-rate schedules. Adapted from ~/MARS/MARS_M/utils/cv_utils.py."""
+"""Learning-rate schedules (cosine, constant, warmup-stable-decay), each with linear warmup."""
 import math
 from typing import Optional
 

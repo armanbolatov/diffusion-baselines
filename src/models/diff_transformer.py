@@ -72,11 +72,13 @@ class TransformerBlock(nn.Module):
 class DiffTransformer(nn.Module):
     def __init__(self, vocab_size: int, block_size: int = 256,
                  n_layer: int = 12, n_head: int = 6, d_model: int = 384,
-                 dropout: float = 0.0):
+                 dropout: float = 0.0, time_emb_dim: int = 0):
         super().__init__()
         self.token_emb = nn.Embedding(vocab_size, d_model)
         self.pos_emb = nn.Parameter(torch.zeros(1, block_size, d_model))
-        time_emb_dim = 4 * d_model
+        # AdaLN conditioning width. Default 4*d_model (unchanged); set smaller
+        # (e.g. 128) to match DiT's slim cond_dim and its parameter count.
+        time_emb_dim = time_emb_dim or 4 * d_model
         self.time_mlp = nn.Sequential(
             nn.Linear(d_model, time_emb_dim),
             nn.SiLU(),
@@ -93,9 +95,14 @@ class DiffTransformer(nn.Module):
         nn.init.trunc_normal_(self.token_emb.weight, std=0.02)
 
     def forward(self, x: torch.Tensor, t: torch.Tensor):
-        # x: (B, T) int, t: (B,) float
-        B, T = x.shape
-        h = self.token_emb(x) + self.pos_emb[:, :T]
+        # x: (B, T) int token ids, or (B, T, V) float probs (DUO's relaxed
+        # curriculum input) — the latter uses the expected embedding.
+        if x.ndim == 3:
+            T = x.shape[1]
+            h = x @ self.token_emb.weight + self.pos_emb[:, :T]
+        else:
+            T = x.shape[1]
+            h = self.token_emb(x) + self.pos_emb[:, :T]
         t_features = _sinusoidal_time_embedding(t, self._d_model)
         t_emb = self.time_mlp(t_features)
         for blk in self.blocks:

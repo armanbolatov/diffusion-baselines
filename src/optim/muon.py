@@ -1,16 +1,17 @@
-"""Muon optimizer — momentum + NewtonSchulz5 spectral-norm post-processing,
+"""Muon optimizer: momentum + NewtonSchulz5 spectral-norm post-processing,
 with AdamW fallback for non-matrix (1-D) parameters.
-
-Adapted from ~/MARS/MARS_M/optimizers/moonlight.py and mars_m_sched.py.
 
 The Newton-Schulz iteration operates on the last 2 dims of the gradient tensor.
 For 4-D conv weights of shape (out, in, kH, kW), this orthogonalizes along
-(kH, kW) per (out, in) pair. This matches the implementation under which the
-DDPM experiments in ~/MARS/MARS_M were run (achieves 18.8% relative MSE win
-vs AdamW on CIFAR-10 DDPM).
+(kH, kW) per (out, in) pair.
 """
 import math
 import torch
+import torch._dynamo
+
+# Fall back to eager if torch.compile's backend can't build (e.g. CPU inductor
+# or a torch version mismatch) instead of crashing the run.
+torch._dynamo.config.suppress_errors = True
 
 
 @torch.compile
@@ -44,6 +45,7 @@ class Muon(torch.optim.Optimizer):
     momentum : SGD-momentum for the matrix branch (0.95 default)
     nesterov : Nesterov-style momentum
     ns_steps : Newton-Schulz iterations (5 default)
+    adamw_lr : lr for the AdamW backup branch (None = same as the Muon lr)
     adamw_betas / adamw_eps : for the AdamW backup branch
     """
 
@@ -56,12 +58,14 @@ class Muon(torch.optim.Optimizer):
         momentum=0.95,
         nesterov=True,
         ns_steps=5,
+        adamw_lr=None,
         adamw_betas=(0.9, 0.95),
         adamw_eps=1e-8,
     ):
         defaults = dict(
-            lr=lr, wd=wd, momentum=momentum, nesterov=nesterov,
-            ns_steps=ns_steps, adamw_betas=adamw_betas, adamw_eps=adamw_eps,
+            lr=lr, wd=wd, momentum=momentum, nesterov=nesterov, ns_steps=ns_steps,
+            adamw_lr=lr if adamw_lr is None else adamw_lr,
+            adamw_betas=adamw_betas, adamw_eps=adamw_eps,
         )
         params = list(muon_params)
         adamw_params = list(adamw_params) if adamw_params is not None else []
@@ -108,6 +112,7 @@ class Muon(torch.optim.Optimizer):
 
             # ----- AdamW backup branch (1-D params) -----
             aparams = [p for p in group["params"] if not self.state[p].get("use_muon", False)]
+            alr = group["adamw_lr"]
             beta1, beta2 = group["adamw_betas"]
             eps = group["adamw_eps"]
             for p in aparams:
@@ -127,6 +132,6 @@ class Muon(torch.optim.Optimizer):
                 bc1 = 1 - beta1 ** step
                 bc2 = 1 - beta2 ** step
                 scale = bc1 / bc2 ** 0.5
-                p.data.mul_(1 - lr * wd)
-                p.data.add_(g_eff, alpha=-lr / scale)
+                p.data.mul_(1 - alr * wd)
+                p.data.add_(g_eff, alpha=-alr / scale)
         return loss

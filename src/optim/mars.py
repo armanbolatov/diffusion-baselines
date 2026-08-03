@@ -1,10 +1,10 @@
 """MARS-Adam: variance-reduced AdamW (no Muon).
 
-Implements the `mars-adamw` variant from ~/MARS/MARS_M/optimizers/mars_clean.py:
-    c_t = g_t + γ · β1/(1-β1) · (g_t - g_{t-1})
+The `mars-adamw` variant:
+    c_t = g_t + gamma * beta1/(1-beta1) * (g_t - g_{t-1})
     AdamW step on c_t.
 
-When γ = 0, this reduces to standard AdamW (small overhead from caching g_{t-1}).
+When gamma = 0, this reduces to standard AdamW (small overhead from caching g_{t-1}).
 """
 import math
 import torch

@@ -1,20 +1,24 @@
 [project]
 name = "diffusion-baselines"
 version = "0.1.0"
-description = "Optimizer benchmark across diffusion tasks (image DDPM, discrete MDLM)"
+description = "Optimizer benchmark across diffusion tasks (CelebA DDPM, text8 MDLM, QM9 UDLM)"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "numpy>=1.26",
-    "torch>=2.4",
-    "torchvision>=0.19",
+    # cu121 build: works with the server's NVIDIA driver 535.x (CUDA 12.2).
+    # Newer torch defaults to cu13 wheels, which need a much newer driver.
+    "torch>=2.4,<2.6",
+    "torchvision>=0.19,<0.21",
     "diffusers>=0.27",
     "datasets>=2.20",
+    "transformers>=4.44",      # QM9 uses the paper's yairschiff/qm9-tokenizer
     "schedulefree>=1.4",
     "lion-pytorch>=0.2",
     "pytorch-optimizer>=3.0",
     "matplotlib>=3.8",
-    "wandb>=0.17",
+    "optuna>=3.6",             # local hyperparameter tuning
     "torch-fidelity>=0.4.0",
+    "rdkit>=2023.9",
 ]
 
 [dependency-groups]
@@ -28,3 +32,15 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+
+# Pull torch/torchvision from the CUDA 12.1 wheel index so they match this
+# server's driver (535.x / CUDA 12.2). Without this, uv installs cu13 wheels
+# and every run crashes with "NVIDIA driver is too old".
+[tool.uv.sources]
+torch = { index = "pytorch-cu121" }
+torchvision = { index = "pytorch-cu121" }
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true

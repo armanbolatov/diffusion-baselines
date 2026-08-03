@@ -1,4 +1,4 @@
-"""Sample faces from a CelebA-32 DDPM checkpoint (full DDPM-1000 reverse process). Defaults to raw weights; pass --ema to load EMA weights instead."""
+"""Sample faces from a CelebA DDPM checkpoint (full DDPM-1000 reverse process). Defaults to raw weights; pass --ema to load EMA weights instead."""
 import argparse
 import math
 from pathlib import Path

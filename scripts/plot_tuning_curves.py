@@ -1,85 +1,61 @@
-"""Plot training-loss curves for each optimizer's tuning-phase winner.
+"""Plot the training-loss curve of each optimizer's tuning-phase winner.
 
-One figure per task, saved to exps/tuning_plots/<task>_train_loss.png.
-Sweep IDs come from scripts/benchmark_winners.py:SWEEPS so the two stay in sync.
+Reads logs/tune_<task>_winners.json (the winning trial number) and that trial's
+exps_tuning/<task>/<opt>/trial_<n>/log.jsonl (no network). One figure per task
+-> exps/tuning_plots/<task>_train_loss.png.
+
+    uv run python scripts/plot_tuning_curves.py qm9 [text8 celeba64]
 """
-import math
+import json
 import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import wandb
 
-from benchmark_winners import ENTITY, PROJECT, SWEEPS, METRIC
+from benchmark_winners import METRIC
 
 OUT = Path("exps/tuning_plots")
 OUT.mkdir(parents=True, exist_ok=True)
 
 
-def winner(api, sids, metric):
-    best, best_v = None, float("inf")
-    for sid in sids:
-        for r in api.sweep(f"{ENTITY}/{PROJECT}/{sid}").runs:
-            if r.state != "finished":
-                continue
-            v = r.summary.get(metric)
-            try:
-                f = float(v)
-            except (TypeError, ValueError):
-                continue
-            if math.isfinite(f) and f < best_v:
-                best_v, best = f, r
-    return best, best_v
-
-
-def history(run, key):
-    rows = [(x["_step"], x[key]) for x in run.scan_history(keys=[key, "_step"])
-            if x.get(key) is not None]
-    seen, out = set(), []
-    for s, v in rows:
-        if s in seen:
+def loss_curve(log_path):
+    steps, losses = [], []
+    for line in log_path.read_text().splitlines():
+        try:
+            e = json.loads(line)
+        except json.JSONDecodeError:
             continue
-        seen.add(s)
-        out.append((s, v))
-    return out
+        if e.get("event") == "iter" and e.get("loss") is not None:
+            steps.append(e["iter"]); losses.append(e["loss"])
+    return steps, losses
 
 
 def plot_task(task: str) -> None:
-    sweeps = SWEEPS.get(task)
-    if not sweeps:
-        print(f"!! {task}: no sweep IDs registered in benchmark_winners.SWEEPS"); return
-    api = wandb.Api()
+    wins = Path("logs") / f"tune_{task}_winners.json"
+    if not wins.exists():
+        print(f"!! {wins} not found — run `bash scripts/tune.sh <gpu> {task}` first")
+        return
+    winners = json.loads(wins.read_text())
     metric = METRIC[task]
     fig, ax = plt.subplots(figsize=(10, 6))
-    cmap = plt.cm.tab10.colors
-    for color, (opt, sids) in zip(cmap, sweeps.items()):
-        r, v = winner(api, sids, metric)
-        if r is None:
-            print(f"!! {task}/{opt}: no finished run"); continue
-        loss_h = history(r, "loss")
-        if not loss_h:
-            print(f"!! {task}/{opt}: no training loss history"); continue
-        steps = [s for s, _ in loss_h]
-        losses = [l for _, l in loss_h]
+    for color, (opt, w) in zip(plt.cm.tab10.colors, winners.items()):
+        log = Path("exps_tuning", task, opt, f"trial_{w['trial']}", "log.jsonl")
+        steps, losses = loss_curve(log) if log.exists() else ([], [])
+        if not losses:
+            print(f"!! {task}/{opt}: no loss history at {log}"); continue
         ax.plot(steps, losses, color=color, lw=1.1, alpha=0.85,
-                label=f"{opt} (final {metric}={v:.4f})")
-        print(f"  {task}/{opt:14s}  final {metric}={v:.4f}  loss_pts={len(losses)}")
-    ax.set_xlabel("iter")
-    ax.set_ylabel("training loss (log scale)")
-    ax.set_yscale("log")
-    ax.set_title(f"{task} tuning: training loss for each optimizer's best config")
-    ax.legend(loc="upper right", fontsize=9)
-    ax.grid(alpha=0.3, which="both")
+                label=f"{opt} (best {metric}={w['value']:.4f})")
+    ax.set_xlabel("iter"); ax.set_ylabel("training loss (log scale)"); ax.set_yscale("log")
+    ax.set_title(f"{task} tuning: training loss of each optimizer's best trial")
+    ax.legend(loc="upper right", fontsize=9); ax.grid(alpha=0.3, which="both")
     plt.tight_layout()
     out = OUT / f"{task}_train_loss.png"
-    plt.savefig(out, dpi=120)
-    plt.close()
-    print(f"wrote {out}\n")
+    plt.savefig(out, dpi=120); plt.close()
+    print(f"wrote {out}")
 
 
 def main(argv=None) -> int:
-    tasks = (argv or sys.argv)[1:] or list(SWEEPS)
-    for t in tasks:
+    for t in (argv or sys.argv[1:]) or ["qm9", "text8", "celeba64"]:
         plot_task(t)
     return 0
 

@@ -11,16 +11,16 @@ from pathlib import Path
 _PER_OPT_EXTRAS = {
     "adamw":         ("beta1", "beta2", "eps"),
     "lion":          ("beta1", "beta2"),
-    "muon":          ("momentum", "nesterov", "ns_steps"),
+    "muon":          ("momentum", "nesterov", "ns_steps", "adamw_lr"),
     "schedule_free": ("beta1", "beta2"),
     "soap":          ("beta1", "beta2", "eps",
                       "precondition_frequency", "max_precondition_dim",
                       "shampoo_beta"),
     "mars":          ("beta1", "beta2", "eps", "gamma"),
-    "mars_m":        ("momentum", "gamma", "ns_steps", "beta1", "beta2", "eps"),
+    "mars_m":        ("momentum", "gamma", "ns_steps", "adamw_lr", "beta1", "beta2", "eps"),
 }
 
-_SHARED_EXTRAS = ("schedule", "warmup_iters", "grad_clip", "min_lr",
+_SHARED_EXTRAS = ("schedule", "warmup_iters", "grad_clip", "grad_accum", "min_lr",
                   "batch_size", "block_size", "diffusion",
                   "n_layer", "n_head", "d_model", "dropout",
                   "num_diffusion_steps", "beta_schedule")

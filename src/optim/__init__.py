@@ -49,7 +49,8 @@ def build_optimizer(args, model: nn.Module) -> Tuple[torch.optim.Optimizer, Dict
         opt = Muon(muon_params=muon_params, adamw_params=adamw_params,
                    lr=lr, wd=wd, momentum=args.momentum,
                    nesterov=args.nesterov, ns_steps=args.ns_steps,
-                   adamw_betas=betas, adamw_eps=eps)
+                   adamw_lr=args.adamw_lr, adamw_betas=betas, adamw_eps=eps)
+        summary["adamw_lr"] = lr if args.adamw_lr is None else args.adamw_lr
         summary["n_muon_params"] = _count_params(muon_params)
         summary["n_adamw_params"] = _count_params(adamw_params)
         summary["n_params"] = summary["n_muon_params"] + summary["n_adamw_params"]
@@ -65,8 +66,9 @@ def build_optimizer(args, model: nn.Module) -> Tuple[torch.optim.Optimizer, Dict
         muon_params, adamw_params = split_for_muon(model)
         opt = MARS_M(muon_params=muon_params, adamw_params=adamw_params,
                      lr=lr, wd=wd, momentum=args.momentum, ns_steps=args.ns_steps,
-                     adamw_betas=betas, adamw_eps=eps,
+                     adamw_lr=args.adamw_lr, adamw_betas=betas, adamw_eps=eps,
                      gamma=args.gamma, clip_c=False)
+        summary["adamw_lr"] = lr if args.adamw_lr is None else args.adamw_lr
         summary["n_muon_params"] = _count_params(muon_params)
         summary["n_adamw_params"] = _count_params(adamw_params)
         summary["n_params"] = summary["n_muon_params"] + summary["n_adamw_params"]

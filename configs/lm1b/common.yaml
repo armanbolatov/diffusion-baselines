@@ -1,0 +1,64 @@
+metric:
+  goal: minimize
+  name: eval_bpc
+parameters:
+  batch_size:
+    value: 512
+  block_size:
+    value: 128
+  d_model:
+    value: 768
+  diffusion:
+    value: duo
+  dropout:
+    value: 0.1
+  eps:
+    value: 1.0e-08
+  eval_interval:
+    value: 300
+  grad_accum:
+    value: 4
+  grad_clip:
+    values:
+    - 0
+    - 1.0
+  kill_at_iter:
+    value: 0
+  kill_if_above:
+    value: 0
+  lr:
+    values:
+    - 1.0e-05
+    - 3.0e-05
+    - 0.0001
+    - 0.0003
+    - 0.001
+    - 0.003
+    - 0.01
+    - 0.03
+  max_iters:
+    value: 6000
+  mdlm_eps:
+    value: 0.001
+  n_head:
+    value: 12
+  n_layer:
+    value: 12
+  schedule:
+    value: wsd
+  seed:
+    value: 0
+  task:
+    value: text_lm1b
+  time_emb_dim:
+    value: 128
+  warmup_iters:
+    value: 600
+  weight_decay:
+    values:
+    - 0.0
+    - 0.01
+    - 0.1
+    - 0.3
+    - 1.0
+run_cap: 100

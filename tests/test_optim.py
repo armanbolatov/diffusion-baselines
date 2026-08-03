@@ -16,7 +16,7 @@ def _default_args(opt: str):
     return Namespace(
         optimizer=opt, lr=1e-3, weight_decay=0.0,
         beta1=0.9, beta2=0.999, eps=1e-8,
-        momentum=0.9, nesterov=False,
+        momentum=0.9, nesterov=False, adamw_lr=None,
         precondition_frequency=10, max_precondition_dim=10000, shampoo_beta=None,
         warmup_iters=0, ns_steps=5, gamma=0.025,
     )
