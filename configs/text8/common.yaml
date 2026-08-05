@@ -1,7 +1,6 @@
-run_cap: 100
 metric:
-  name: eval_bpc
   goal: minimize
+  name: eval_bpc
 parameters:
   batch_size:
     value: 512
@@ -25,6 +24,16 @@ parameters:
     value: 0
   kill_if_above:
     value: 0
+  lr:
+    values:
+    - 1.0e-05
+    - 3.0e-05
+    - 0.0001
+    - 0.0003
+    - 0.001
+    - 0.003
+    - 0.01
+    - 0.03
   max_iters:
     value: 6000
   mdlm_eps:
@@ -48,13 +57,5 @@ parameters:
     - 0.1
     - 0.3
     - 1.0
-  lr:
-    values:
-    - 1.0e-05
-    - 3.0e-05
-    - 0.0001
-    - 0.0003
-    - 0.001
-    - 0.003
-    - 0.01
-    - 0.03
+    - 3.0
+run_cap: 100
