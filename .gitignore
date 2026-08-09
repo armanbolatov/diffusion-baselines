@@ -7,13 +7,16 @@ __pycache__/
 # uv / venv
 .venv/
 
-# data and experiments (anchored to repo root so src/data/ source is tracked)
-/exps/
+# Results: exps*/ log.jsonl and figures ARE tracked — they are the paper's data.
+# Only the heavy artifacts below are excluded (no trailing comments: git treats
+# them as part of the pattern).
+# datasets (src/data/ is source code and stays tracked)
 /data/
-/exps_tuning/
-/exps_bench/
-/exps_transfer/
+# archived results from earlier protocol versions
 /arxiv/
+# cached real-image folders for FID (tens of thousands of PNGs)
+/exps/fid/
+# tuning state: binary and churning; logs/tune_*_winners.json is the result
 optuna_db/
 optuna_*.db
 *.bin
@@ -32,6 +35,8 @@ optuna_*.db
 wandb/
 CLAUDE.md
 
-# Local logs
-logs/
+# logs/: keep the small result artifacts, drop the raw stdout
+logs/*
+!logs/tune_*_winners.json
+!logs/flops.json
 paper/
