@@ -16,9 +16,11 @@ __pycache__/
 /arxiv/
 # cached real-image folders for FID (tens of thousands of PNGs)
 /exps/fid/
-# tuning state: binary and churning; logs/tune_*_winners.json is the result
-optuna_db/
-optuna_*.db
+# SQLite side-files (transient); the optuna_db/*.db studies themselves are tracked
+# so tuning can be resumed on another machine
+*.db-journal
+*.db-wal
+*.db-shm
 *.bin
 *.zip
 
