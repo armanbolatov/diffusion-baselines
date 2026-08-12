@@ -12,6 +12,7 @@ import fcntl
 import json
 import math
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -74,7 +75,11 @@ def run_trial(trial, fixed, swept, metric, task, opt, env):
         if t.number != trial.number and t.params == trial.params:
             return t.value                     # duplicate config already evaluated — reuse, no GPU
     out_dir = Path("exps_tuning") / task / opt / f"trial_{trial.number}"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    # Wipe first: the logger appends, and trial numbering restarts at 0 whenever a
+    # study is reset — so a stale log.jsonl here would be tailed as if it belonged
+    # to this trial, and `min()` below would silently adopt its scores.
+    shutil.rmtree(out_dir, ignore_errors=True)
+    out_dir.mkdir(parents=True)
     argv = [s for k, v in {**fixed, **sampled}.items() for s in (f"--{k}", str(v))]
     argv += ["--seed", "0", "--out_dir", str(out_dir)]
     print(f"--- {opt} trial {trial.number}: "

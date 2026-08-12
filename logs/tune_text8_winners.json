@@ -1,4 +1,32 @@
 {
+  "adamw": {
+    "value": 2.0560660362243652,
+    "params": {
+      "batch_size": 512,
+      "block_size": 256,
+      "d_model": 256,
+      "diffusion": "mdlm",
+      "dropout": 0.0,
+      "eps": 1e-08,
+      "eval_interval": 300,
+      "kill_at_iter": 0,
+      "kill_if_above": 0,
+      "max_iters": 6000,
+      "mdlm_eps": 0.001,
+      "n_head": 8,
+      "n_layer": 8,
+      "schedule": "wsd",
+      "task": "text_text8",
+      "warmup_iters": 600,
+      "optimizer": "adamw",
+      "grad_clip": 0,
+      "lr": 0.001,
+      "weight_decay": 0.01,
+      "beta1": 0.9,
+      "beta2": 0.8
+    },
+    "trial": 9
+  },
   "lion": {
     "value": 2.013674283027649,
     "params": {
@@ -27,36 +55,8 @@
     },
     "trial": 66
   },
-  "adamw": {
-    "value": 2.018235242366791,
-    "params": {
-      "batch_size": 512,
-      "block_size": 256,
-      "d_model": 256,
-      "diffusion": "mdlm",
-      "dropout": 0.0,
-      "eps": 1e-08,
-      "eval_interval": 300,
-      "kill_at_iter": 0,
-      "kill_if_above": 0,
-      "max_iters": 6000,
-      "mdlm_eps": 0.001,
-      "n_head": 8,
-      "n_layer": 8,
-      "schedule": "wsd",
-      "task": "text_text8",
-      "warmup_iters": 600,
-      "optimizer": "adamw",
-      "grad_clip": 0,
-      "lr": 0.03,
-      "weight_decay": 0.3,
-      "beta1": 0.95,
-      "beta2": 0.8
-    },
-    "trial": 34
-  },
   "muon": {
-    "value": 1.9397760868072509,
+    "value": 1.9492005228996276,
     "params": {
       "batch_size": 512,
       "block_size": 256,
@@ -79,14 +79,14 @@
       "grad_clip": 1.0,
       "lr": 0.01,
       "weight_decay": 0.1,
-      "adamw_lr": 3e-05,
-      "momentum": 0.99,
+      "adamw_lr": 0.003,
+      "momentum": 0.5,
       "nesterov": false
     },
-    "trial": 67
+    "trial": 12
   },
   "schedule_free": {
-    "value": 2.0883492469787597,
+    "value": 2.2251314401626585,
     "params": {
       "batch_size": 512,
       "block_size": 256,
@@ -108,13 +108,13 @@
       "grad_clip": 0,
       "lr": 0.001,
       "weight_decay": 3.0,
-      "beta1": 0.999,
+      "beta1": 0.8,
       "beta2": 0.9
     },
-    "trial": 13
+    "trial": 22
   },
   "soap": {
-    "value": 1.9644129514694213,
+    "value": 1.9662397623062133,
     "params": {
       "batch_size": 512,
       "block_size": 256,
@@ -134,14 +134,14 @@
       "warmup_iters": 600,
       "optimizer": "soap",
       "shampoo_beta": 0.95,
-      "grad_clip": 1.0,
-      "lr": 0.01,
-      "weight_decay": 0.1,
-      "beta1": 0.99,
-      "beta2": 0.999,
-      "precondition_frequency": 10
+      "grad_clip": 0,
+      "lr": 0.003,
+      "weight_decay": 0.3,
+      "beta1": 0.95,
+      "beta2": 0.95,
+      "precondition_frequency": 50
     },
-    "trial": 50
+    "trial": 28
   },
   "mars": {
     "value": 2.009667921066284,

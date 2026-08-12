@@ -84,6 +84,16 @@ full budget (`BENCH_ITERS` in `benchmark_winners.py`). Studies live in
 proxy metric (`eval_bpc` for text/molecules, denoising `eval_loss` for images); for
 CelebA the reported quality metric is FID, computed separately (see below).
 
+Winners are re-derived from the raw trial logs before benchmarking, for every task:
+
+```bash
+uv run python scripts/rescore_winners.py text8 celeba64 qm9 lm1b --write
+```
+
+Each trial is scored by the minimum eval logged after the last `config` event in its
+own `log.jsonl` — i.e. only the run belonging to that trial. This makes the winners
+reproducible from the logs alone rather than trusted from the study database.
+
 ## Layout
 
 ```
