@@ -34,8 +34,17 @@ def out_dir(task, opt, seed):
     return Path("exps_bench") / task / opt / f"seed{seed}"
 
 
-def is_done(d, iters):
-    """A run is finished once it logged an eval at (or past) the target iters.
+def _same(a, b):
+    try:
+        return abs(float(a) - float(b)) < 1e-12
+    except (TypeError, ValueError):
+        return str(a) == str(b)
+
+
+def is_done(d, iters, cfg=None):
+    """A run counts as finished only if it reached `iters` AND was trained with
+    `cfg`. Without the config check a leftover run from an earlier winner would
+    be silently kept as this winner's result.
 
     (The trainer only emits a distinct ``final_eval`` when max_iters isn't a
     multiple of eval_interval; otherwise the terminal eval is a plain ``eval``.)
@@ -43,14 +52,25 @@ def is_done(d, iters):
     log = d / "log.jsonl"
     if not log.exists():
         return False
+    logged, reached = None, False
     for line in log.read_text().splitlines():
-        if '"event": "eval"' in line or '"event": "final_eval"' in line:
-            try:
-                if json.loads(line).get("iter", 0) >= iters:
-                    return True
-            except json.JSONDecodeError:
-                pass
-    return False
+        try:
+            e = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if e.get("event") == "config":
+            logged = e.get("args", {})
+        elif e.get("event") in ("eval", "final_eval") and e.get("iter", 0) >= iters:
+            reached = True
+    if not reached:
+        return False
+    if cfg and logged is not None:
+        stale = [k for k, v in cfg.items()
+                 if k in PASSTHRU and k in logged and not _same(logged[k], v)]
+        if stale:
+            print(f"  !! {d}: reached {iters} but config differs ({', '.join(stale)}) -> rerunning")
+            return False
+    return True
 
 
 def build_argv(cfg, seed, task, opt, iters, extra=None):
@@ -77,6 +97,10 @@ def run_task(task, iters, seeds, only=None, extra=None):
     print(f"\n=== {task} benchmark ({len(seeds)} seed(s) {seeds} x {iters} iters) ===")
     # seed-outer / optimizer-inner: finish every optimizer at one seed before
     # moving to the next, so stopping early still yields a full 1-seed sweep.
+    wanted = [o for o in OPT_ORDER if not only or o in only]
+    missing = [o for o in wanted if o not in winners]
+    if missing:
+        print(f"!! {task}: no tuned winner for {', '.join(missing)} — not benchmarked")
     for seed in seeds:
         print(f"\n===== seed {seed} =====")
         for opt in OPT_ORDER:
@@ -84,7 +108,7 @@ def run_task(task, iters, seeds, only=None, extra=None):
                 continue
             cfg = winners[opt]["params"]
             d = out_dir(task, opt, seed)
-            if is_done(d, iters):
+            if is_done(d, iters, cfg):
                 print(f"  {opt} seed {seed} -> already done, skipping", flush=True)
                 continue
             if d.exists():                     # partial run: wipe (the logger appends)

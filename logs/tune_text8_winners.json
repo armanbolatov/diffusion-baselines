@@ -86,7 +86,7 @@
     "trial": 12
   },
   "schedule_free": {
-    "value": 2.2251314401626585,
+    "value": 2.0872071027755736,
     "params": {
       "batch_size": 512,
       "block_size": 256,
@@ -106,12 +106,12 @@
       "warmup_iters": 600,
       "optimizer": "schedule_free",
       "grad_clip": 0,
-      "lr": 0.001,
-      "weight_decay": 3.0,
-      "beta1": 0.8,
-      "beta2": 0.9
+      "lr": 0.01,
+      "weight_decay": 1.0,
+      "beta1": 0.95,
+      "beta2": 0.8
     },
-    "trial": 22
+    "trial": 89
   },
   "soap": {
     "value": 1.9662397623062133,
@@ -144,7 +144,7 @@
     "trial": 28
   },
   "mars": {
-    "value": 2.009667921066284,
+    "value": 1.9795288801193238,
     "params": {
       "batch_size": 512,
       "block_size": 256,
@@ -163,14 +163,14 @@
       "task": "text_text8",
       "warmup_iters": 600,
       "optimizer": "mars",
-      "grad_clip": 1.0,
+      "grad_clip": 0,
       "lr": 0.001,
       "weight_decay": 1.0,
-      "beta1": 0.95,
-      "beta2": 0.999,
-      "gamma": 0.01
+      "beta1": 0.9,
+      "beta2": 0.9,
+      "gamma": 0.003
     },
-    "trial": 10
+    "trial": 80
   },
   "mars_m": {
     "value": 1.9514036297798156,

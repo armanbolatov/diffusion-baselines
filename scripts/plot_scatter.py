@@ -17,6 +17,7 @@ from matplotlib.markers import MarkerStyle
 TASKS = {"qm9": ("eval_bpc", 25000), "text8": ("eval_bpc", 30000),
          "celeba64": ("eval_fid", 100000)}
 OPT_ORDER = ["adamw", "lion", "muon", "schedule_free", "soap", "mars", "mars_m"]
+SEED_DIRS = {"seed42", "seed69", "seed1337"}
 FLOPS = json.loads(Path("logs/flops.json").read_text())
 OUT = Path("exps/final_plots/scatter_flops_mem.png")
 
@@ -41,7 +42,8 @@ for ax, (task, (metric, iters)) in zip(axes, TASKS.items()):
     pts = []
     for opt in OPT_ORDER:
         runs = [run_stats(f, metric, iters)
-                for f in Path("exps_bench", task, opt).glob("seed*/log.jsonl")]
+                for f in Path("exps_bench", task, opt).glob("seed*/log.jsonl")
+                if f.parent.name in SEED_DIRS]
         runs = [r for r in runs if r]
         if not runs or opt not in FLOPS.get(task, {}):
             continue

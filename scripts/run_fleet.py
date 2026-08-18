@@ -27,14 +27,15 @@ PREP  = {"qm9":   [sys.executable, "-m", "src.data.qm9", "--block_size", "32"],
 LOGDIR = Path("logs/fleet")
 
 
-def jobs_for(phase, tasks):
+def jobs_for(phase, tasks, only=None):
+    opts = [o for o in OPTS if not only or o in only]
     if phase == "tune":
         return [(f"tune_{t}_{o}", [sys.executable, "scripts/tune_local.py", t, o])
-                for t in tasks for o in OPTS]
+                for t in tasks for o in opts]
     return [(f"bench_{t}_{o}_s{s}",
              [sys.executable, "scripts/benchmark_winners.py", t, "--only", o,
               "--seeds", str(s), *FID.get(t, [])])
-            for t in tasks for o in OPTS for s in SEEDS]
+            for t in tasks for o in opts for s in SEEDS]
 
 
 def worker(gpu, q):
@@ -57,9 +58,9 @@ def worker(gpu, q):
         print(f"[gpu{gpu}] done  {name} (exit {rc}) -> {log}", flush=True)
 
 
-def run(phase, tasks, gpus):
+def run(phase, tasks, gpus, only=None):
     q = queue.Queue()
-    for job in jobs_for(phase, tasks):
+    for job in jobs_for(phase, tasks, only):
         q.put(job)
     print(f"=== {phase}: {q.qsize()} jobs on GPUs {gpus} ===", flush=True)
     threads = [threading.Thread(target=worker, args=(g, q)) for g in gpus]
@@ -74,6 +75,7 @@ def main():
     p.add_argument("--gpus", nargs="+", type=int, required=True)
     p.add_argument("--phase", choices=["tune", "bench", "all"], default="all")
     p.add_argument("--tasks", nargs="+", default=TASKS)
+    p.add_argument("--only", nargs="+", help="restrict to these optimizers")
     a = p.parse_args()
     LOGDIR.mkdir(parents=True, exist_ok=True)
     phases = ["tune", "bench"] if a.phase == "all" else [a.phase]
@@ -82,7 +84,7 @@ def main():
             if t in PREP:
                 print(f"prep {t}", flush=True); subprocess.call(PREP[t])
     for phase in phases:
-        run(phase, a.tasks, a.gpus)
+        run(phase, a.tasks, a.gpus, a.only)
     print("fleet complete", flush=True)
 
 

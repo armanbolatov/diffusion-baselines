@@ -33,7 +33,10 @@ def audit_study(task, opt, top_k):
             and t.value is not None and t.value < PENALTY]
     if not done:
         return None
-    _, swept, _, _ = search_space(task, opt)
+    # Use what the study ACTUALLY searched, not today's config: a grid edited
+    # after the fact would make a boundary winner look interior.
+    swept = {k: list(d.choices) for k, d in done[-1].distributions.items()
+             if hasattr(d, "choices")}
     top = sorted(done, key=lambda t: t.value)[:top_k]
     best = top[0]
 
@@ -42,6 +45,8 @@ def audit_study(task, opt, top_k):
         vals = sorted(v for v in grid if isinstance(v, (int, float)))
         if len(vals) <= 2:                          # binary toggle: no outside
             continue
+        if param == "weight_decay" and best.params.get(param) == vals[0] == 0:
+            continue                                # wd=0 is a domain floor, not a grid limit
         b = best.params.get(param)
         at_min = sum(t.params.get(param) == vals[0] for t in top)
         at_max = sum(t.params.get(param) == vals[-1] for t in top)

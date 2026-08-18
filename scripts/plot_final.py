@@ -17,6 +17,9 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from benchmark_winners import BENCH_ITERS  # noqa: E402
+
 TASKS = {
     "text8":  {"metric": "eval_bpc",  "ylabel": "eval bpc", "log_y": True},
     "qm9":    {"metric": "eval_bpc",  "ylabel": "eval bpc", "log_y": True},
@@ -24,6 +27,7 @@ TASKS = {
     "lm1b":   {"metric": "eval_bpc",  "ylabel": "eval bpc", "log_y": True},
 }
 OPT_ORDER = ["adamw", "lion", "muon", "schedule_free", "soap", "mars", "mars_m"]
+SEEDS = {42, 69, 1337}          # benchmark seeds; ignore stray seed dirs from other runs
 OUT = Path("exps/final_plots")
 OUT.mkdir(parents=True, exist_ok=True)
 
@@ -72,12 +76,19 @@ def plot_task(task: str) -> None:
     cfg = TASKS[task]
     metric = cfg["metric"]
     by_opt = defaultdict(list)
-    for log in sorted(Path("exps_bench", task).glob("*/*/log.jsonl")):
-        opt = log.parts[-3]                                   # exps_bench/<task>/<opt>/<run>/
+    target = BENCH_ITERS[task]
+    for log in sorted(Path("exps_bench", task).glob("*/seed*/log.jsonl")):
+        opt = log.parts[-3]                                   # exps_bench/<task>/<opt>/seed<n>/
         if opt not in OPT_ORDER:
+            continue
+        if log.parts[-2].removeprefix("seed") not in {str(s) for s in SEEDS}:
+            print(f"!! ignoring {log.parts[-2]} for {opt} (not a benchmark seed)")
             continue
         tr = read_triples(log, metric)
         if not tr:
+            continue
+        if tr[-1][0] < target:                                # incomplete seed: name it, drop it
+            print(f"!! {opt}/{log.parts[-2]}: stopped at iter {tr[-1][0]} < {target}, excluded")
             continue
         if metric == "eval_loss" and tr[-1][2] > 0.1:         # skip diverged image runs
             print(f"!! skipping diverged {opt}: {metric}={tr[-1][2]:.3f}")

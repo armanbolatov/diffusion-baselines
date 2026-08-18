@@ -11,7 +11,9 @@ that trial was given. The winner is the lowest-scoring COMPLETE trial.
 Without --write it only prints the diff against the current winners file.
 """
 import argparse
+import fcntl
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -20,6 +22,7 @@ import optuna
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from tune_local import search_space  # noqa: E402
 
+MIN_TRIALS = 10   # below this a study is too young to overwrite a mature winner
 OPTS = ["adamw", "lion", "muon", "schedule_free", "soap", "mars", "mars_m"]
 
 
@@ -66,7 +69,7 @@ def rescore(task, opt):
         return None
     fixed, _, metric, _ = search_space(task, opt)
     study = optuna.load_study(study_name=f"{task}_{opt}", storage=f"sqlite:///{db}")
-    best = None
+    best, n_scored = None, 0
     for t in study.trials:
         if t.state != optuna.trial.TrialState.COMPLETE:
             continue
@@ -74,9 +77,10 @@ def rescore(task, opt):
         v = own_score(task, opt, t.number, metric, cfg)
         if v is None:
             continue
+        n_scored += 1
         if best is None or v < best[0]:
             best = (v, t.number, cfg)
-    return best
+    return (*best, n_scored) if best else None
 
 
 def main():
@@ -94,9 +98,14 @@ def main():
             r = rescore(task, opt)
             if r is None:
                 continue
-            value, n, params = r
-            new[opt] = {"value": value, "params": params, "trial": n}
+            value, n, params, n_scored = r
             prev = old.get(opt, {}).get("value")
+            if not math.isfinite(value):
+                print(f"  {opt:<14} {'skip':>10}  (best is non-finite)"); continue
+            if prev is not None and n_scored < MIN_TRIALS and value > prev:
+                print(f"  {opt:<14} {value:>10.4f}  skip: only {n_scored} scored trials "
+                      f"(study still running?), keeping {prev:.4f}"); continue
+            new[opt] = {"value": value, "params": params, "trial": n}
             if prev is None:
                 print(f"  {opt:<14} {value:>10.4f}  (new)")
             elif abs(prev - value) < 1e-9:
@@ -108,8 +117,14 @@ def main():
         print(f"  -> {changed} corrected of {len(new)}")
         if a.write and new:
             wins.parent.mkdir(exist_ok=True)
-            wins.write_text(json.dumps(new, indent=2))
-            print(f"  wrote {wins}")
+            with open(wins, "a+") as f:               # same lock the tuner takes
+                fcntl.flock(f, fcntl.LOCK_EX)
+                f.seek(0); cur = f.read()
+                data = json.loads(cur) if cur.strip() else {}
+                data.update(new)                      # merge: never drop an optimizer
+                f.seek(0); f.truncate()
+                f.write(json.dumps(data, indent=2))
+            print(f"  wrote {wins} ({len(new)} entries merged, {len(data)} total)")
     return 0
 
 

@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 OPT_ORDER = ["adamw", "lion", "muon", "schedule_free", "soap", "mars", "mars_m"]
+SEED_DIRS = {"seed42", "seed69", "seed1337"}
 COLORS = dict(zip(OPT_ORDER, plt.cm.tab10.colors))
 # task -> (metric, iters, ylabel, logy, ylim)
 TASKS = {
@@ -24,6 +25,8 @@ OUT = Path("exps/final_plots/grid.png")
 def curves(task, opt, metric, iters):
     runs = []
     for f in Path("exps_bench", task, opt).glob("seed*/log.jsonl"):
+        if f.parent.name not in SEED_DIRS:                # ignore stray non-benchmark seeds
+            continue
         pts = {}
         for line in f.read_text().splitlines():
             try:
