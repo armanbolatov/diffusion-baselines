@@ -1,6 +1,6 @@
 {
   "adamw": {
-    "value": 2.0560660362243652,
+    "value": 2.0054986119270324,
     "params": {
       "batch_size": 512,
       "block_size": 256,
@@ -21,14 +21,14 @@
       "optimizer": "adamw",
       "grad_clip": 0,
       "lr": 0.001,
-      "weight_decay": 0.01,
-      "beta1": 0.9,
+      "weight_decay": 0.3,
+      "beta1": 0.8,
       "beta2": 0.8
     },
-    "trial": 9
+    "trial": 35
   },
   "lion": {
-    "value": 2.013674283027649,
+    "value": 2.0009585499763487,
     "params": {
       "batch_size": 512,
       "block_size": 256,
@@ -47,16 +47,16 @@
       "task": "text_text8",
       "warmup_iters": 600,
       "optimizer": "lion",
-      "grad_clip": 1.0,
+      "grad_clip": 0,
       "lr": 0.0003,
-      "weight_decay": 1.0,
+      "weight_decay": 3.0,
       "beta1": 0.8,
-      "beta2": 0.95
+      "beta2": 0.9
     },
-    "trial": 66
+    "trial": 87
   },
   "muon": {
-    "value": 1.9492005228996276,
+    "value": 1.9415526986122131,
     "params": {
       "batch_size": 512,
       "block_size": 256,
@@ -79,11 +79,11 @@
       "grad_clip": 1.0,
       "lr": 0.01,
       "weight_decay": 0.1,
-      "adamw_lr": 0.003,
+      "adamw_lr": 0.001,
       "momentum": 0.5,
       "nesterov": false
     },
-    "trial": 12
+    "trial": 100
   },
   "schedule_free": {
     "value": 2.0872071027755736,
@@ -114,7 +114,7 @@
     "trial": 89
   },
   "soap": {
-    "value": 1.9662397623062133,
+    "value": 1.940100109577179,
     "params": {
       "batch_size": 512,
       "block_size": 256,
@@ -139,9 +139,9 @@
       "weight_decay": 0.3,
       "beta1": 0.95,
       "beta2": 0.95,
-      "precondition_frequency": 50
+      "precondition_frequency": 10
     },
-    "trial": 28
+    "trial": 92
   },
   "mars": {
     "value": 1.9795288801193238,
@@ -173,7 +173,7 @@
     "trial": 80
   },
   "mars_m": {
-    "value": 1.9514036297798156,
+    "value": 1.9422322273254395,
     "params": {
       "batch_size": 512,
       "block_size": 256,
@@ -196,10 +196,10 @@
       "grad_clip": 1.0,
       "lr": 0.003,
       "weight_decay": 0.3,
-      "adamw_lr": 0.001,
+      "adamw_lr": 0.0003,
       "gamma": 0.025,
-      "momentum": 0.9
+      "momentum": 0.95
     },
-    "trial": 37
+    "trial": 88
   }
 }

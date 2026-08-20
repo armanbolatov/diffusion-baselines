@@ -1,0 +1,41 @@
+{"event": "config", "args": {"task": "mol_qm9", "optimizer": "muon", "diffusion": "udlm", "out_dir": "exps_tuning/qm9/muon/trial_9", "exp_root": "exps", "log_interval": 50, "eval_interval": 250, "eval_batches": 10, "device": "cuda", "seed": 0, "compile": false, "dry_run": false, "resume": false, "save_ckpt": false, "ema_decay": 0.0, "kill_at_iter": 0, "kill_if_above": 0.0, "max_iters": 5000, "warmup_iters": 500, "schedule": "wsd", "min_lr": 0.0, "data_dir": "data", "batch_size": 2048, "eval_batch_size": 128, "num_workers": 2, "max_docs": 2000000, "image_size": 64, "ema_eval": 0, "fid_n": 0, "fid_steps": 50, "fid_stride": 1, "lr": 0.03, "weight_decay": 0.3, "beta1": 0.9, "beta2": 0.999, "eps": 1e-08, "grad_clip": 1.0, "grad_accum": 1, "precondition_frequency": 10, "max_precondition_dim": 10000, "shampoo_beta": null, "momentum": 0.2, "nesterov": false, "ns_steps": 5, "adamw_lr": 3e-05, "gamma": 0.025, "num_diffusion_steps": 1000, "beta_schedule": "linear", "block_size": 32, "n_layer": 12, "n_head": 12, "d_model": 768, "time_emb_dim": 128, "dropout": 0.1, "mdlm_eps": 0.001, "sample_n": 256}}
+{"event": "params", "optimizer": "muon", "lr": 0.03, "adamw_lr": 3e-05, "n_muon_params": 89964544, "n_adamw_params": 207616, "n_params": 90172160}
+{"event": "iter", "iter": 0, "loss": 3.4246666431427, "lr": 0.0, "dt_iter_s": 0.07613412857055664, "peak_mem_mb": 27554.37939453125, "opt_metrics": {}}
+{"event": "iter", "iter": 50, "loss": 1.0648239850997925, "lr": 0.003, "dt_iter_s": 1.8520335340499878, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 100, "loss": 0.8125054836273193, "lr": 0.006, "dt_iter_s": 1.8598353719711305, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 150, "loss": 0.7231801152229309, "lr": 0.009, "dt_iter_s": 1.8653617095947266, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 200, "loss": 0.6845320463180542, "lr": 0.012, "dt_iter_s": 1.865784969329834, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "eval", "iter": 250, "elapsed_s": 480.18412041664124, "eval_bpc": 1.6902185048450278, "eval_ppl": 3.227055756890224, "diffusion": "udlm"}
+{"event": "iter", "iter": 250, "loss": 0.6465723514556885, "lr": 0.015, "dt_iter_s": 2.121603169441223, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 300, "loss": 0.6340580582618713, "lr": 0.018, "dt_iter_s": 1.8617689418792724, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 350, "loss": 0.6596463918685913, "lr": 0.021, "dt_iter_s": 1.8589092445373536, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 400, "loss": 0.6554809808731079, "lr": 0.024, "dt_iter_s": 1.8498119831085205, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 450, "loss": 0.6262454986572266, "lr": 0.027, "dt_iter_s": 1.8640270376205443, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "eval", "iter": 500, "elapsed_s": 957.6521189212799, "eval_bpc": 1.7921714338371761, "eval_ppl": 3.463357784557436, "diffusion": "udlm"}
+{"event": "iter", "iter": 500, "loss": 0.6694791316986084, "lr": 0.03, "dt_iter_s": 2.11526752948761, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 550, "loss": 0.6281655430793762, "lr": 0.03, "dt_iter_s": 1.8535031652450562, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 600, "loss": 0.6501353979110718, "lr": 0.03, "dt_iter_s": 1.859129090309143, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 650, "loss": 0.6615421772003174, "lr": 0.03, "dt_iter_s": 1.8570751476287841, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 700, "loss": 0.6303823590278625, "lr": 0.03, "dt_iter_s": 1.849143524169922, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "eval", "iter": 750, "elapsed_s": 1434.2012910842896, "eval_bpc": 1.6630166183234398, "eval_ppl": 3.166779941235917, "diffusion": "udlm"}
+{"event": "iter", "iter": 750, "loss": 0.6478816866874695, "lr": 0.03, "dt_iter_s": 2.1118731546401976, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 800, "loss": 0.6521297693252563, "lr": 0.03, "dt_iter_s": 1.8595319509506225, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 850, "loss": 0.652116596698761, "lr": 0.03, "dt_iter_s": 1.8525629758834838, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 900, "loss": 0.6137584447860718, "lr": 0.03, "dt_iter_s": 1.859453740119934, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 950, "loss": 0.6129063367843628, "lr": 0.03, "dt_iter_s": 1.8605925607681275, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "eval", "iter": 1000, "elapsed_s": 1908.079656124115, "eval_bpc": 1.7230636340036303, "eval_ppl": 3.3013672466551047, "diffusion": "udlm"}
+{"event": "iter", "iter": 1000, "loss": 0.6585416793823242, "lr": 0.03, "dt_iter_s": 2.0238592433929443, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 1050, "loss": 0.6120361685752869, "lr": 0.03, "dt_iter_s": 1.033982319831848, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 1100, "loss": 0.6174522638320923, "lr": 0.03, "dt_iter_s": 1.7790049076080323, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 1150, "loss": 0.6255661845207214, "lr": 0.03, "dt_iter_s": 1.858553352355957, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 1200, "loss": 0.6255459785461426, "lr": 0.03, "dt_iter_s": 1.8580749130249024, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "eval", "iter": 1250, "elapsed_s": 2325.8218564987183, "eval_bpc": 1.559691708775004, "eval_ppl": 2.947908425201464, "diffusion": "udlm"}
+{"event": "iter", "iter": 1250, "loss": 0.6253907084465027, "lr": 0.03, "dt_iter_s": 1.8466201257705688, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 1300, "loss": 0.6343716382980347, "lr": 0.03, "dt_iter_s": 1.8600786876678468, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 1350, "loss": 0.6194329261779785, "lr": 0.03, "dt_iter_s": 1.858289475440979, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 1400, "loss": 0.6433140635490417, "lr": 0.03, "dt_iter_s": 1.5837250280380248, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 1450, "loss": 0.6021032333374023, "lr": 0.03, "dt_iter_s": 1.85898681640625, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "eval", "iter": 1500, "elapsed_s": 2789.3032290935516, "eval_bpc": 1.6773537658911126, "eval_ppl": 3.198407512618744, "diffusion": "udlm"}
+{"event": "iter", "iter": 1500, "loss": 0.6313010454177856, "lr": 0.03, "dt_iter_s": 2.1087124872207643, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 1550, "loss": 0.6051205992698669, "lr": 0.03, "dt_iter_s": 1.612242922782898, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
+{"event": "iter", "iter": 1600, "loss": 0.5946352481842041, "lr": 0.03, "dt_iter_s": 1.8262143516540528, "peak_mem_mb": 27902.52587890625, "opt_metrics": {}}
