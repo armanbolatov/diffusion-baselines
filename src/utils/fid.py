@@ -6,6 +6,7 @@ folder of real CelebA images (at the run's image_size) via torch_fidelity. Used 
 ``eval_step`` (opt-in via ``--fid_n``); the full-budget FID lives in
 ``scripts/fid_celeba.py``.
 """
+import os
 import shutil
 from pathlib import Path
 
@@ -13,7 +14,9 @@ import torch
 import torchvision.utils as vutils
 from diffusers import DDIMScheduler
 
-_FAKE_DIR = Path("exps/fid/_train_tmp")
+# per-process: run_fleet runs several celeba64 jobs in one working directory,
+# and a shared temp dir means each process scores the others' samples.
+_FAKE_DIR = Path(f"exps/fid/_train_tmp_{os.getpid()}")
 
 
 def ensure_real(n: int, size: int) -> None:
