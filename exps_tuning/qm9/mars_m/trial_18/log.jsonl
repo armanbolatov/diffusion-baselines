@@ -1,0 +1,20 @@
+{"event": "config", "args": {"task": "mol_qm9", "optimizer": "mars_m", "diffusion": "udlm", "out_dir": "exps_tuning/qm9/mars_m/trial_18", "exp_root": "exps", "log_interval": 50, "eval_interval": 250, "eval_batches": 10, "device": "cuda", "seed": 0, "compile": false, "dry_run": false, "resume": false, "save_ckpt": false, "ema_decay": 0.0, "kill_at_iter": 0, "kill_if_above": 0.0, "max_iters": 5000, "warmup_iters": 500, "schedule": "wsd", "min_lr": 0.0, "data_dir": "data", "batch_size": 2048, "eval_batch_size": 128, "num_workers": 2, "max_docs": 2000000, "image_size": 64, "ema_eval": 0, "fid_n": 0, "fid_steps": 50, "fid_stride": 1, "lr": 0.003, "weight_decay": 0.01, "beta1": 0.9, "beta2": 0.999, "eps": 1e-08, "grad_clip": 1.0, "grad_accum": 1, "precondition_frequency": 10, "max_precondition_dim": 10000, "shampoo_beta": null, "momentum": 0.99, "nesterov": true, "ns_steps": 5, "adamw_lr": 0.0003, "gamma": 0.01, "num_diffusion_steps": 1000, "beta_schedule": "linear", "block_size": 32, "n_layer": 12, "n_head": 12, "d_model": 768, "time_emb_dim": 128, "dropout": 0.1, "mdlm_eps": 0.001, "sample_n": 256}}
+{"event": "params", "optimizer": "mars_m", "lr": 0.003, "adamw_lr": 0.0003, "n_muon_params": 89964544, "n_adamw_params": 207616, "n_params": 90172160}
+{"event": "iter", "iter": 0, "loss": 3.4246666431427, "lr": 0.0, "dt_iter_s": 0.08822097778320312, "peak_mem_mb": 27554.37939453125, "opt_metrics": {}}
+{"event": "iter", "iter": 50, "loss": 1.013835072517395, "lr": 0.0003, "dt_iter_s": 1.185546441078186, "peak_mem_mb": 28256.58837890625, "opt_metrics": {}}
+{"event": "iter", "iter": 100, "loss": 0.8122398853302002, "lr": 0.0006, "dt_iter_s": 1.199639129638672, "peak_mem_mb": 28258.08837890625, "opt_metrics": {}}
+{"event": "iter", "iter": 150, "loss": 0.6974376440048218, "lr": 0.0009, "dt_iter_s": 1.2050371026992799, "peak_mem_mb": 28258.96337890625, "opt_metrics": {}}
+{"event": "iter", "iter": 200, "loss": 0.6449172496795654, "lr": 0.0012, "dt_iter_s": 1.1899277544021607, "peak_mem_mb": 28258.96337890625, "opt_metrics": {}}
+{"event": "eval", "iter": 250, "elapsed_s": 310.34449887275696, "eval_bpc": 1.5592182293880028, "eval_ppl": 2.946941107217096, "diffusion": "udlm"}
+{"event": "iter", "iter": 250, "loss": 0.5864028334617615, "lr": 0.0015, "dt_iter_s": 1.3631466579437257, "peak_mem_mb": 28258.96337890625, "opt_metrics": {}}
+{"event": "iter", "iter": 300, "loss": 0.5691766142845154, "lr": 0.0018, "dt_iter_s": 1.2033517837524415, "peak_mem_mb": 28258.96337890625, "opt_metrics": {}}
+{"event": "iter", "iter": 350, "loss": 0.5591657757759094, "lr": 0.0021000000000000003, "dt_iter_s": 1.1884573125839233, "peak_mem_mb": 28258.96337890625, "opt_metrics": {}}
+{"event": "iter", "iter": 400, "loss": 0.5715653300285339, "lr": 0.0024, "dt_iter_s": 1.187839331626892, "peak_mem_mb": 28258.96337890625, "opt_metrics": {}}
+{"event": "iter", "iter": 450, "loss": 0.5449122786521912, "lr": 0.0027, "dt_iter_s": 1.2356055116653442, "peak_mem_mb": 28258.96337890625, "opt_metrics": {}}
+{"event": "eval", "iter": 500, "elapsed_s": 619.7541816234589, "eval_bpc": 1.4274631019821755, "eval_ppl": 2.6897332482902865, "diffusion": "udlm"}
+{"event": "iter", "iter": 500, "loss": 0.552662193775177, "lr": 0.003, "dt_iter_s": 1.3728168249130248, "peak_mem_mb": 28258.96337890625, "opt_metrics": {}}
+{"event": "iter", "iter": 550, "loss": 0.5474253296852112, "lr": 0.003, "dt_iter_s": 1.2153218412399291, "peak_mem_mb": 28258.96337890625, "opt_metrics": {}}
+{"event": "iter", "iter": 600, "loss": 0.5610553622245789, "lr": 0.003, "dt_iter_s": 1.2062273550033569, "peak_mem_mb": 28258.96337890625, "opt_metrics": {}}
+{"event": "iter", "iter": 650, "loss": 0.5562084913253784, "lr": 0.003, "dt_iter_s": 1.196740746498108, "peak_mem_mb": 28258.96337890625, "opt_metrics": {}}
+{"event": "iter", "iter": 700, "loss": 0.5646761059761047, "lr": 0.003, "dt_iter_s": 1.20459979057312, "peak_mem_mb": 28258.96337890625, "opt_metrics": {}}
+{"event": "eval", "iter": 750, "elapsed_s": 929.2127885818481, "eval_bpc": 1.4737389325931336, "eval_ppl": 2.777407631542486, "diffusion": "udlm"}

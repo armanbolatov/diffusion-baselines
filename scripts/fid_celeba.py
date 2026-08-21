@@ -9,6 +9,7 @@ Usage:
     uv run python scripts/fid_celeba.py <ckpt> --n 50000 --size 64
 """
 import argparse
+import json
 import math
 import shutil
 from pathlib import Path
@@ -80,15 +81,27 @@ def main() -> None:
     args = p.parse_args()
 
     dump_real(args.n, args.size)
-    fake_dir = Path(f"exps/fid/fake/{Path(args.ckpt).parent.name}")
+    ck = Path(args.ckpt)
+    # key on <opt>_<seed>: every optimizer's ckpt lives in a dir called "seed42",
+    # so keying on the parent alone made concurrent runs share one sample dir.
+    tag = f"{ck.parent.parent.name}_{ck.parent.name}"
+    fake_dir = Path(f"exps/fid/fake/{tag}")
     if not (fake_dir.exists() and len(list(fake_dir.iterdir())) >= args.n):
         sample_to_dir(Path(args.ckpt), args.n, args.bs, fake_dir, args.size)
 
     from torch_fidelity import calculate_metrics
     m = calculate_metrics(input1=str(fake_dir), input2=str(real_dir(args.size)),
                           cuda=True, isc=False, fid=True, kid=False, verbose=False)
-    print(f"FID = {m['frechet_inception_distance']:.2f}")
+    fid = float(m["frechet_inception_distance"])
+    print(f"FID = {fid:.2f}")
 
+    # persist it: the reportable FID used to exist only in this print()
+    out = Path("logs/fid_celeba.json")
+    data = json.loads(out.read_text()) if out.exists() else {}
+    data[tag] = {"fid": fid, "n": args.n, "size": args.size, "ckpt": str(ck)}
+    out.parent.mkdir(exist_ok=True)
+    out.write_text(json.dumps(data, indent=2))
+    print(f"wrote {out}")
     if not args.keep_samples:
         shutil.rmtree(fake_dir)
 

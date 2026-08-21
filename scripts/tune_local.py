@@ -71,14 +71,15 @@ def terminate(proc, grace=10):
 def run_trial(trial, fixed, swept, metric, task, opt, env):
     """Launch src.main, tail its log, prune live, return the best (min) eval."""
     sampled = {k: trial.suggest_categorical(k, v) for k, v in swept.items()}
+    out_dir = Path("exps_tuning") / task / opt / f"trial_{trial.number}"
+    # Wipe before anything else: the logger appends, and trial numbering restarts
+    # at 0 whenever a study is reset — a stale log.jsonl here would be tailed as
+    # if it belonged to this trial. Wipe on the duplicate path too, so a skipped
+    # trial never leaves someone else's run sitting in its directory.
+    shutil.rmtree(out_dir, ignore_errors=True)
     for t in trial.study.get_trials(deepcopy=False, states=(optuna.trial.TrialState.COMPLETE,)):
         if t.number != trial.number and t.params == trial.params:
             return t.value                     # duplicate config already evaluated — reuse, no GPU
-    out_dir = Path("exps_tuning") / task / opt / f"trial_{trial.number}"
-    # Wipe first: the logger appends, and trial numbering restarts at 0 whenever a
-    # study is reset — so a stale log.jsonl here would be tailed as if it belonged
-    # to this trial, and `min()` below would silently adopt its scores.
-    shutil.rmtree(out_dir, ignore_errors=True)
     out_dir.mkdir(parents=True)
     argv = [s for k, v in {**fixed, **sampled}.items() for s in (f"--{k}", str(v))]
     argv += ["--seed", "0", "--out_dir", str(out_dir)]
