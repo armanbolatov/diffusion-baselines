@@ -6,35 +6,39 @@ folder of real CelebA images (at the run's image_size) via torch_fidelity. Used 
 ``eval_step`` (opt-in via ``--fid_n``); the full-budget FID lives in
 ``scripts/fid_celeba.py``.
 """
-import os
 import shutil
+import tempfile
 from pathlib import Path
 
 import torch
 import torchvision.utils as vutils
 from diffusers import DDIMScheduler
 
-# per-process: run_fleet runs several celeba64 jobs in one working directory,
-# and a shared temp dir means each process scores the others' samples.
-_FAKE_DIR = Path(f"exps/fid/_train_tmp_{os.getpid()}")
-
 
 def ensure_real(n: int, size: int) -> None:
-    """Cache ``n`` real CelebA eval images (at ``size``) as PNGs (once)."""
+    """Cache ``n`` real CelebA eval images (at ``size``) as PNGs (once, atomically)."""
     real = Path(f"exps/fid/real_celeba_{size}")
     if real.exists() and len(list(real.glob("*.png"))) >= n:
         return real
     from ..data.celeba import celeba_loaders
-    real.mkdir(parents=True, exist_ok=True)
+    real.parent.mkdir(parents=True, exist_ok=True)
+    tmp = Path(tempfile.mkdtemp(prefix=f"real_celeba_{size}_", dir=real.parent))
     _, eval_loader = celeba_loaders("data", 256, 256, num_workers=2, image_size=size)
     saved = 0
     for x, _ in eval_loader:
         x = (x.clamp(-1, 1) + 1) / 2
         for img in x:
-            vutils.save_image(img, real / f"{saved:06d}.png")
+            vutils.save_image(img, tmp / f"{saved:06d}.png")
             saved += 1
             if saved >= n:
-                return real
+                break
+        if saved >= n:
+            break
+    shutil.rmtree(real, ignore_errors=True)   # stale or undersized cache
+    try:
+        tmp.rename(real)
+    except OSError:                           # a concurrent run won the race
+        shutil.rmtree(tmp, ignore_errors=True)
     return real
 
 
@@ -42,9 +46,6 @@ def ensure_real(n: int, size: int) -> None:
 def _sample(model, n: int, steps: int, device, out_dir: Path, size: int) -> None:
     sched = DDIMScheduler(num_train_timesteps=1000, beta_schedule="linear")
     sched.set_timesteps(steps, device=device)
-    if out_dir.exists():
-        shutil.rmtree(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
     saved = 0
     while saved < n:
         b = min(256, n - saved)
@@ -65,12 +66,16 @@ def fid_score(model, n: int, steps: int, device, size: int = 32) -> float:
     real = ensure_real(n, size)
     was_training = model.training
     model.eval()
-    _sample(model, n, steps, device, _FAKE_DIR, size)
-    if was_training:
-        model.train()
-    from torch_fidelity import calculate_metrics
-    m = calculate_metrics(input1=str(_FAKE_DIR), input2=str(real),
-                          cuda=device.type == "cuda", isc=False, fid=True,
-                          kid=False, verbose=False)
-    shutil.rmtree(_FAKE_DIR, ignore_errors=True)
+    # per-call scratch: concurrent runs must not share a sample dir
+    fake = Path(tempfile.mkdtemp(prefix="fid_fake_"))
+    try:
+        _sample(model, n, steps, device, fake, size)
+        from torch_fidelity import calculate_metrics
+        m = calculate_metrics(input1=str(fake), input2=str(real),
+                              cuda=device.type == "cuda", isc=False, fid=True,
+                              kid=False, verbose=False)
+    finally:
+        shutil.rmtree(fake, ignore_errors=True)
+        if was_training:
+            model.train()
     return float(m["frechet_inception_distance"])

@@ -89,10 +89,12 @@ def build_argv(cfg, seed, task, opt, iters, extra=None):
 
 
 def run_task(task, iters, seeds, only=None, extra=None):
+    """Returns the number of runs that exited nonzero (0 = all clean)."""
+    failed = 0
     wins = Path("logs") / f"tune_{task}_winners.json"
     if not wins.exists():
         print(f"!! {wins} not found — run `bash scripts/tune.sh <gpu> {task}` first")
-        return
+        return failed
     winners = json.loads(wins.read_text())
     print(f"\n=== {task} benchmark ({len(seeds)} seed(s) {seeds} x {iters} iters) ===")
     # seed-outer / optimizer-inner: finish every optimizer at one seed before
@@ -123,6 +125,9 @@ def run_task(task, iters, seeds, only=None, extra=None):
                  *build_argv(cfg, seed, task, opt, iters, extra)],
                 stderr=subprocess.STDOUT)
             print(f"      exit={rc}  {(time.time() - t0) / 60:.1f} min", flush=True)
+            if rc != 0:
+                failed += 1
+    return failed
 
 
 def main(argv=None):
@@ -140,12 +145,13 @@ def main(argv=None):
     extra = (["--fid_n", str(a.fid_n), "--fid_steps", str(a.fid_steps),
               "--fid_stride", str(a.fid_stride)] if a.fid_n > 0 else None)
     Path("logs").mkdir(exist_ok=True)
+    failed = 0
     for t in (a.tasks or list(METRIC)):
         if t not in METRIC:
             print(f"unknown task: {t}; choose from {list(METRIC)}")
             return 1
-        run_task(t, a.iters or BENCH_ITERS[t], a.seeds, a.only, extra)
-    return 0
+        failed += run_task(t, a.iters or BENCH_ITERS[t], a.seeds, a.only, extra)
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

@@ -18,12 +18,12 @@ import torch
 from diffusers import DDPMScheduler
 import torchvision.utils as vutils
 
-from src.data.celeba import celeba_loaders
 from src.models import build_image_model
 
 
 def real_dir(size):
-    return Path(f"exps/fid/real_celeba_{size}")
+    # train-split reference stats (standard FID protocol)
+    return Path(f"exps/fid/real_celeba_train_{size}")
 
 
 @torch.no_grad()
@@ -32,10 +32,12 @@ def dump_real(n: int, size: int) -> None:
     if d.exists() and len(list(d.iterdir())) >= n:
         return
     d.mkdir(parents=True, exist_ok=True)
-    _, eval_loader = celeba_loaders(data_dir="data", batch_size=256,
-                                    eval_batch_size=256, num_workers=0, image_size=size)
+    from torch.utils.data import DataLoader
+    from src.data.celeba import _CelebA, eval_transform
+    loader = DataLoader(_CelebA("train", eval_transform(size)),
+                        batch_size=256, num_workers=2)
     saved = 0
-    for x, _ in eval_loader:
+    for x, _ in loader:
         x = (x.clamp(-1, 1) + 1) / 2
         for img in x:
             vutils.save_image(img, d / f"{saved:06d}.png")

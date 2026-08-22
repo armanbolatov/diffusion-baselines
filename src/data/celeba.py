@@ -20,6 +20,16 @@ class _CelebA(Dataset):
         return self.tx(img), 0
 
 
+def eval_transform(image_size):
+    """Deterministic crop/resize/scale (no augmentation)."""
+    return transforms.Compose([
+        transforms.CenterCrop(CROP),
+        transforms.Resize(image_size),
+        transforms.ToTensor(),
+        transforms.Lambda(lambda t: t * 2 - 1),
+    ])
+
+
 def celeba_loaders(data_dir, batch_size, eval_batch_size, num_workers=2, image_size=32):
     train_tx = transforms.Compose([
         transforms.CenterCrop(CROP),
@@ -28,12 +38,7 @@ def celeba_loaders(data_dir, batch_size, eval_batch_size, num_workers=2, image_s
         transforms.ToTensor(),
         transforms.Lambda(lambda t: t * 2 - 1),
     ])
-    eval_tx = transforms.Compose([
-        transforms.CenterCrop(CROP),
-        transforms.Resize(image_size),
-        transforms.ToTensor(),
-        transforms.Lambda(lambda t: t * 2 - 1),
-    ])
+    eval_tx = eval_transform(image_size)
     train_ds = _CelebA("train", train_tx)
     eval_ds  = _CelebA("valid", eval_tx)
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,
