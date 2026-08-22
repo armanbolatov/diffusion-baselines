@@ -58,7 +58,7 @@
     "trial": 84
   },
   "muon": {
-    "value": 1.0838535920526342,
+    "value": 1.079820177689906,
     "params": {
       "batch_size": 2048,
       "block_size": 32,
@@ -79,14 +79,14 @@
       "warmup_iters": 500,
       "ns_steps": 5,
       "optimizer": "muon",
-      "grad_clip": 0,
-      "lr": 0.001,
-      "weight_decay": 0.0,
-      "adamw_lr": 3e-05,
-      "momentum": 0.8,
+      "grad_clip": 1.0,
+      "lr": 0.003,
+      "weight_decay": 0.1,
+      "adamw_lr": 1e-05,
+      "momentum": 0.5,
       "nesterov": false
     },
-    "trial": 63
+    "trial": 86
   },
   "schedule_free": {
     "value": 1.1197761648673783,
@@ -179,7 +179,7 @@
     "trial": 72
   },
   "mars_m": {
-    "value": 1.0814056294252345,
+    "value": 1.087784378724074,
     "params": {
       "batch_size": 2048,
       "block_size": 32,
@@ -200,13 +200,13 @@
       "warmup_iters": 500,
       "ns_steps": 5,
       "optimizer": "mars_m",
-      "grad_clip": 0,
-      "lr": 0.001,
+      "grad_clip": 1.0,
+      "lr": 0.003,
       "weight_decay": 0.1,
-      "adamw_lr": 0.0001,
-      "gamma": 0.075,
-      "momentum": 0.8
+      "adamw_lr": 0.001,
+      "gamma": 0.1,
+      "momentum": 0.5
     },
-    "trial": 56
+    "trial": 66
   }
 }
