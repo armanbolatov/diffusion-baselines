@@ -15,7 +15,7 @@ import shutil
 from pathlib import Path
 
 import torch
-from diffusers import DDPMScheduler
+from diffusers import DDIMScheduler, DDPMScheduler
 import torchvision.utils as vutils
 
 from src.models import build_image_model
@@ -46,7 +46,8 @@ def dump_real(n: int, size: int) -> None:
 
 
 @torch.no_grad()
-def sample_to_dir(ckpt: Path, n: int, bs: int, out_dir: Path, size: int) -> None:
+def sample_to_dir(ckpt: Path, n: int, bs: int, out_dir: Path, size: int,
+                  steps: int = 1000) -> None:
     device = torch.device("cuda")
     model = build_image_model(argparse.Namespace(dropout=0.0), sample_size=size).to(device)
     payload = torch.load(ckpt, map_location=device, weights_only=False)
@@ -54,8 +55,11 @@ def sample_to_dir(ckpt: Path, n: int, bs: int, out_dir: Path, size: int) -> None
     state = payload.get("ema_state") or payload["model_state"]
     model.load_state_dict(state); model.eval()
 
-    sched = DDPMScheduler(num_train_timesteps=1000, beta_schedule="linear")
-    sched.set_timesteps(1000, device=device)
+    # steps=1000 -> ancestral DDPM (the paper's headline setting); fewer steps
+    # -> DDIM, which is ~1000/steps times cheaper and also a published protocol.
+    cls = DDPMScheduler if steps >= 1000 else DDIMScheduler
+    sched = cls(num_train_timesteps=1000, beta_schedule="linear")
+    sched.set_timesteps(steps, device=device)
     out_dir.mkdir(parents=True, exist_ok=True)
     saved = 0
     while saved < n:
@@ -79,6 +83,8 @@ def main() -> None:
     p.add_argument("--n",  type=int, default=2048)
     p.add_argument("--bs", type=int, default=256)
     p.add_argument("--size", type=int, default=64, help="image resolution (celeba64 = 64)")
+    p.add_argument("--steps", type=int, default=1000,
+                   help="sampler steps: 1000 = DDPM (headline), <1000 = DDIM")
     p.add_argument("--keep_samples", action="store_true")
     args = p.parse_args()
 
@@ -86,10 +92,10 @@ def main() -> None:
     ck = Path(args.ckpt)
     # key on <opt>_<seed>: every optimizer's ckpt lives in a dir called "seed42",
     # so keying on the parent alone made concurrent runs share one sample dir.
-    tag = f"{ck.parent.parent.name}_{ck.parent.name}"
+    tag = f"{ck.parent.parent.name}_{ck.parent.name}_s{args.steps}"
     fake_dir = Path(f"exps/fid/fake/{tag}")
     if not (fake_dir.exists() and len(list(fake_dir.iterdir())) >= args.n):
-        sample_to_dir(Path(args.ckpt), args.n, args.bs, fake_dir, args.size)
+        sample_to_dir(Path(args.ckpt), args.n, args.bs, fake_dir, args.size, args.steps)
 
     from torch_fidelity import calculate_metrics
     m = calculate_metrics(input1=str(fake_dir), input2=str(real_dir(args.size)),
@@ -100,7 +106,8 @@ def main() -> None:
     # persist it: the reportable FID used to exist only in this print()
     out = Path("logs/fid_celeba.json")
     data = json.loads(out.read_text()) if out.exists() else {}
-    data[tag] = {"fid": fid, "n": args.n, "size": args.size, "ckpt": str(ck)}
+    data[tag] = {"fid": fid, "n": args.n, "size": args.size,
+                 "steps": args.steps, "ckpt": str(ck)}
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(data, indent=2))
     print(f"wrote {out}")
