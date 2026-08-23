@@ -73,6 +73,21 @@ def finals(task, metric):
     return {o: c[o][t] for o in c if c[o].get(t)}
 
 
+def headline_fid():
+    """{opt: [FID per seed]} from logs/fid_celeba.json: 50k samples, EMA, train
+    reference. This is the reportable CelebA number; eval_fid in the logs is the
+    10k-sample training monitor."""
+    p = Path("logs/fid_celeba.json")
+    if not p.exists():
+        return {}
+    out = defaultdict(list)
+    for tag, v in json.loads(p.read_text()).items():
+        opt = tag.rsplit("_seed", 1)[0]
+        if v.get("n", 0) >= 50000:
+            out[opt].append(v["fid"])
+    return dict(out)
+
+
 def kendall(a, b):
     con = dis = 0
     for i in range(len(a)):
@@ -163,6 +178,24 @@ def fig_curves(task, metric, ylabel, out, logy=None):
     return True
 
 
+def fig_placeholder(out, label):
+    """An empty panel in the paper's style, so the layout is final before the
+    data lands. Replaced automatically once curves() finds runs."""
+    fig, ax = plt.subplots(figsize=(5.4, 3.2), constrained_layout=True)
+    ax.set_xlabel("Training step")
+    ax.set_ylabel("Validation bpc")
+    ax.set_xlim(0, 30000)
+    ax.set_ylim(0, 1)
+    ax.set_yticks([])
+    ax.text(0.5, 0.5, f"{label}\nresults pending", transform=ax.transAxes,
+            ha="center", va="center", fontsize=14, color="#B03030")
+    minor_grid(ax)
+    fig.savefig(out)
+    fig.savefig(out.with_suffix(".png"), dpi=150)
+    plt.close(fig)
+    return True
+
+
 def fig_text8_pair(out):
     """Two panels sharing one legend: the whole run, and the last half where the
     Schedule-Free crossover happens."""
@@ -239,8 +272,14 @@ def tex_main_results(path):
     """One row per optimizer, one column per task, mean +/- sd over seeds."""
     cols = list(TASKS)
     vals = {t: finals(t, TASKS[t][0]) for t in cols}
-    # only rank/bold a task whose optimizers all have the full 3 seeds
-    best = {t: min((st.mean(v) for v in vals[t].values() if len(v) >= 3), default=None)
+    hf = headline_fid()
+    if hf:
+        vals["celeba64"] = hf
+    # bold only when every optimizer on that task has all 3 seeds; a best
+    # picked among a partial set is not a best
+    best = {t: (min(st.mean(v) for v in vals[t].values())
+                if vals[t] and len(vals[t]) == len(OPTS)
+                and all(len(v) >= 3 for v in vals[t].values()) else None)
             for t in cols}
     L = [r"\begin{tabular}{l" + "c" * len(cols) + "}", r"\toprule",
          " & ".join([""] + [TASKS[t][1] for t in cols]) + r" \\",
@@ -466,7 +505,7 @@ def tex_grid(path):
         n = 1
         for v in sw.values():
             n *= len(v)
-        extra = ", ".join(f"{k.replace(chr(95), chr(92) + chr(95))} ({len(v)})"
+        extra = ", ".join(f"\\texttt{{{k.replace(chr(95), chr(92) + chr(95))}}} ({len(v)})"
                           for k, v in sorted(sw.items()) if k not in SHARED)
         L.append(f"{NAME[o]} & \\scriptsize {extra} & {n} & 100 \\\\")
     L += [r"\bottomrule", r"\end{tabular}"]
@@ -522,6 +561,11 @@ def main():
         made.append("celeba_curves")
     if fig_curves("qm9", "eval_bpc", "Validation bpc", fig / "qm9_curves.pdf"):
         made.append("qm9_curves")
+    if not fig_curves("lm1b", "eval_bpc", "Validation bpc", fig / "lm1b_curves.pdf"):
+        fig_placeholder(fig / "lm1b_curves.pdf", "LM1B (DUO)")
+        made.append("lm1b_curves (placeholder)")
+    else:
+        made.append("lm1b_curves")
     if fig_text8_pair(fig / "text8_panels.pdf"):
         made.append("text8_panels")
     tex_main_results(tab / "main_results.tex")
