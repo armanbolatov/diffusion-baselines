@@ -275,9 +275,9 @@ def tex_main_results(path):
     path.write_text("\n".join(L) + "\n")
 
 
-def tex_paired(path, task="text8"):
+def tex_paired(path, task="text8", metric=None):
     """Paired within-seed comparison against AdamW."""
-    metric = TASKS[task][0]
+    metric = metric or TASKS[task][0]
     tab = by_seed(task, metric)
     if "adamw" not in tab:
         path.write_text(PEND + "\n")
@@ -286,16 +286,17 @@ def tex_paired(path, task="text8"):
     L = [r"\begin{tabular}{lccc}", r"\toprule",
          r" & final " + ("bpc" if metric == "eval_bpc" else "FID") +
          r" & $\Delta$ vs AdamW & significant \\", r"\midrule"]
+    nd = 4 if metric == "eval_bpc" else 2
     means = {o: st.mean(list(tab[o].values())) for o in tab}
     for o in sorted(tab, key=lambda o: means[o]):
         if o == "adamw":
-            L.append(f"{NAME[o]} & {means[o]:.4f} & --- & --- \\\\")
+            L.append(f"{NAME[o]} & {means[o]:.{nd}f} & --- & --- \\\\")
             continue
         if o not in p:
             continue
         m, se, _ = p[o]
         sig = "yes" if abs(m) > 2 * se else "no"
-        L.append(f"{NAME[o]} & {means[o]:.4f} & ${m:+.4f} \\pm {se:.4f}$ & {sig} \\\\")
+        L.append(f"{NAME[o]} & {means[o]:.{nd}f} & ${m:+.{nd}f} \\pm {se:.{nd}f}$ & {sig} \\\\")
     L += [r"\bottomrule", r"\end{tabular}"]
     path.write_text("\n".join(L) + "\n")
 
@@ -436,26 +437,85 @@ def tex_tasks(path):
     path.write_text("\n".join(L) + "\n")
 
 
+def _searched(task, opt):
+    """The grid a study ACTUALLY searched, from its trials' distributions.
+
+    Reading today's config instead would describe a grid that may have been
+    edited after the study ran, which is how an edge winner can be made to look
+    interior. Same reason audit_edges.py reads distributions.
+    """
+    import optuna
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    try:
+        st = optuna.load_study(study_name=f"{task}_{opt}",
+                               storage=f"sqlite:///optuna_db/optuna_{task}_{opt}.db")
+    except Exception:
+        return None
+    done = [t for t in st.trials
+            if t.state == optuna.trial.TrialState.COMPLETE
+            and t.value is not None and t.value < 1e9]
+    if not done:
+        return None
+    return {k: list(d.choices) for k, d in done[-1].distributions.items()
+            if hasattr(d, "choices")}
+
+
 def tex_grid(path):
-    """Per-optimizer swept axes and grid size, read from the configs."""
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from tune_local import search_space
+    """Per-optimizer swept axes and grid size, from what each study searched."""
     SHARED = {"lr", "weight_decay", "grad_clip"}
     L = [r"\begin{tabular}{llrr}", r"\toprule",
          r"optimizer & optimizer-specific axes & grid & trials \\", r"\midrule"]
     for o in OPTS:
-        try:
-            _, sw, _, cap = search_space("text8", o)
-        except Exception:
+        sw = _searched("text8", o)
+        if not sw:
             continue
         n = 1
         for v in sw.values():
             n *= len(v)
         extra = ", ".join(f"{k.replace(chr(95), chr(92) + chr(95))} ({len(v)})"
                           for k, v in sorted(sw.items()) if k not in SHARED)
-        L.append(f"{NAME[o]} & \\scriptsize {extra} & {n} & {cap} \\\\")
+        L.append(f"{NAME[o]} & \\scriptsize {extra} & {n} & 100 \\\\")
     L += [r"\bottomrule", r"\end{tabular}"]
     path.write_text("\n".join(L) + "\n")
+
+
+def tex_grid_dev(path):
+    """Every place a study's shared axes departed from the common grid.
+
+    The appendix claims one shared grid across all tasks; wherever that is not
+    true the paper has to say so, so this table is generated rather than
+    asserted.
+    """
+    COMMON = {"lr": [1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2],
+              "weight_decay": [0, 0.01, 0.1, 0.3, 1, 3],
+              "grad_clip": [0, 1.0]}
+    def fmt(v):
+        f = float(v)
+        return f"{f:g}"
+    rows = []
+    for task in ("text8", "qm9", "celeba64", "lm1b"):
+        for o in OPTS:
+            sw = _searched(task, o)
+            if not sw:
+                continue
+            for k, common in COMMON.items():
+                got = sw.get(k)
+                if got is None:
+                    continue
+                a = sorted(float(x) for x in got)
+                b = sorted(float(x) for x in common)
+                if len(a) == len(b) and all(abs(x - y) < 1e-12 for x, y in zip(a, b)):
+                    continue
+                rows.append((task, NAME[o], k.replace("_", r"\_"),
+                             f"$\\{{{fmt(a[0])}, \\ldots, {fmt(a[-1])}\\}}$ ({len(a)})",
+                             f"({len(b)})"))
+    L = [r"\begin{tabular}{lllll}", r"\toprule",
+         r"task & optimizer & axis & searched & common \\", r"\midrule"]
+    for r in rows:
+        L.append(" & ".join(r) + r" \\")
+    L += [r"\bottomrule", r"\end{tabular}"]
+    path.write_text("\n".join(L) + "\n")
+    return len(rows)
 
 
 def main():
@@ -478,6 +538,9 @@ def main():
         made.append("cross_task")
     tex_main_results(tab / "main_results.tex")
     tex_paired(tab / "paired_text8.tex")
+    tex_paired(tab / "paired_celeba.tex", "celeba64", "eval_fid")
+    ndev = tex_grid_dev(tab / "grid_dev.tex")
+    print(f"grid deviations from the common axes: {ndev}")
     tex_cost(tab / "cost.tex")
     tex_winners(tab / "winners.tex")
     tex_tasks(tab / "tasks_table.tex")
