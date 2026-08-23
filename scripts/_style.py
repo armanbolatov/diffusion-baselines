@@ -10,8 +10,8 @@ below.
 import matplotlib
 import seaborn as sns
 
-LW = 2.2        # line width
-S_LINE = 34     # scatter marker size for the dots on a line
+LW = 1.5        # line width
+S_LINE = 22     # scatter marker size for the dots on a line
 
 # Colorblind-safe (Color Universal Design). Keyed by series name so a method
 # keeps its colour in every figure; never pick a colour per plot.

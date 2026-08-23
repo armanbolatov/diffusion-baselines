@@ -178,60 +178,67 @@ def fig_curves(task, metric, ylabel, out, logy=None):
     return True
 
 
-def fig_placeholder(out, label):
-    """An empty panel in the paper's style, so the layout is final before the
-    data lands. Replaced automatically once curves() finds runs."""
-    fig, ax = plt.subplots(figsize=(5.4, 3.2), constrained_layout=True)
-    ax.set_xlabel("Training step")
-    ax.set_ylabel("Validation bpc")
-    ax.set_xlim(0, 30000)
-    ax.set_ylim(0, 1)
-    ax.set_yticks([])
-    ax.text(0.5, 0.5, f"{label}\nresults pending", transform=ax.transAxes,
-            ha="center", va="center", fontsize=14, color="#B03030")
+def _panel(ax, xs_ys, ylabel, xlabel, logy=False):
+    for o, xs, ys, sd in xs_ys:
+        ax.plot(xs, ys, color=COLORS[o], lw=LW, label=NAME[o])
+        if sd is not None:
+            ax.fill_between(xs, [a - b for a, b in zip(ys, sd)],
+                            [a + b for a, b in zip(ys, sd)],
+                            color=COLORS[o], alpha=0.15, lw=0)
+        step = max(1, len(xs) // 6)
+        ax.scatter(xs[::step], ys[::step], color=COLORS[o],
+                   marker=MARKERS[o], s=S_LINE, zorder=3)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    if logy:
+        ax.set_yscale("log")
     minor_grid(ax)
-    fig.savefig(out)
-    fig.savefig(out.with_suffix(".png"), dpi=150)
-    plt.close(fig)
-    return True
 
 
-def fig_text8_pair(out):
-    """Two panels sharing one legend: the whole run, and the last half where the
-    Schedule-Free crossover happens."""
-    c = curves("text8", "eval_bpc")
+def fig_task(task, metric, ylabel, out, second="flops"):
+    """Two panels sharing a legend: metric vs steps, and either metric vs
+    cumulative compute (second='flops') or a second metric (second=<metric>).
+
+    FLOPs differ by at most 7% across optimizers here, so the compute panel
+    nearly reproduces the step panel; it is included because steps hide even
+    that difference, while wall-clock (Table cost) is implementation-bound.
+    """
+    c = curves(task, metric)
     if not c:
         return False
-    fig, (a1, a2) = plt.subplots(1, 2, figsize=(9.6, 3.4), constrained_layout=True)
-    for ax, lo in ((a1, 0), (a2, 15000)):
-        for o in OPTS:
-            if o not in c:
-                continue
-            its = sorted(i for i in c[o] if i >= lo)
-            if not its:
-                continue
-            m = [st.mean(c[o][i]) for i in its]
-            sd = [st.stdev(c[o][i]) if len(c[o][i]) > 1 else 0 for i in its]
-            lead = o == "schedule_free"
-            ax.plot(its, m, color=COLORS[o], lw=LW, label=NAME[o],
-                    ls="-" if (lo and lead) else "-" if not lo else "--",
-                    alpha=1.0 if (not lo or lead) else 0.8)
-            if not lo:
-                ax.fill_between(its, [x - y for x, y in zip(m, sd)],
-                                [x + y for x, y in zip(m, sd)],
-                                color=COLORS[o], alpha=0.15, lw=0)
-            step = max(1, len(its) // 6)
-            ax.scatter(its[::step], m[::step], color=COLORS[o],
-                       marker=MARKERS[o], s=S_LINE, zorder=3,
-                       alpha=1.0 if (not lo or lead) else 0.8)
-        ax.set_xlabel("Training step")
-        minor_grid(ax)
-    a1.set_ylabel("Validation bpc")
+    logy = False
+    vals = [v for o in c for i in c[o] for v in c[o][i] if v > 0]
+    if vals and max(vals) / min(vals) >= 10:
+        logy = True
+    fl = json.loads(Path("logs/flops.json").read_text()).get(task, {}) if second == "flops" else {}
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(9.6, 3.1), constrained_layout=True)
+    series = []
+    for o in OPTS:
+        if o not in c:
+            continue
+        its = sorted(c[o])
+        m = [st.mean(c[o][i]) for i in its]
+        sd = [st.stdev(c[o][i]) if len(c[o][i]) > 1 else 0 for i in its]
+        series.append((o, its, m, sd))
+    _panel(a1, series, ylabel, "Training step", logy)
     a1.set_xlim(left=0)
-    a1.text(0.5, 0.94, "full run", transform=a1.transAxes, ha="center",
-            va="top", fontsize=12, color="#2A2A2A")
-    a2.text(0.5, 0.94, "last half", transform=a2.transAxes, ha="center",
-            va="top", fontsize=12, color="#2A2A2A")
+    if second == "flops":
+        conv = [(o, [i * fl[o] / 1e15 for i in xs], m, None)
+                for o, xs, m, _ in series if o in fl]
+        _panel(a2, conv, ylabel, "Training compute (PFLOPs)", logy)
+    else:
+        c2 = curves(task, second)
+        s2 = []
+        for o in OPTS:
+            if o not in c2:
+                continue
+            its = sorted(c2[o])
+            m = [st.mean(c2[o][i]) for i in its]
+            sd = [st.stdev(c2[o][i]) if len(c2[o][i]) > 1 else 0 for i in its]
+            s2.append((o, its, m, sd))
+        _panel(a2, s2, {"eval_loss": "Denoising MSE"}.get(second, second),
+               "Training step", False)
+        a2.set_xlim(left=0)
     shared_legend(fig, a1, ncols=7)
     fig.savefig(out)
     fig.savefig(out.with_suffix(".png"), dpi=150)
@@ -239,28 +246,19 @@ def fig_text8_pair(out):
     return True
 
 
-def fig_crossover(out):
-    """text8: Schedule-Free leads mid-training, then the decay phase passes it."""
-    c = curves("text8", "eval_bpc")
-    if not c:
-        return False
-    fig, ax = plt.subplots(figsize=(5.4, 3.2), constrained_layout=True)
-    for o in OPTS:
-        if o not in c:
-            continue
-        its = sorted(i for i in c[o] if i >= 15000)
-        m = [st.mean(c[o][i]) for i in its]
-        lead = o == "schedule_free"
-        ax.plot(its, m, color=COLORS[o], lw=LW, label=NAME[o],
-                ls="-" if lead else "--", alpha=1.0 if lead else 0.8)
-        step = max(1, len(its) // 5)
-        ax.scatter(its[::step], m[::step], color=COLORS[o],
-                   marker=MARKERS[o], s=S_LINE, zorder=3,
-                   alpha=1.0 if lead else 0.8)
-    ax.set_xlabel("Training step")
-    ax.set_ylabel("Validation bpc")
-    minor_grid(ax)
-    shared_legend(fig, ax, ncols=4)
+def fig_placeholder(out, label):
+    """Two empty panels in the paper's style, so the layout is final before the
+    data lands."""
+    fig, axes = plt.subplots(1, 2, figsize=(9.6, 3.1), constrained_layout=True)
+    for ax in axes:
+        ax.set_xlabel("Training step")
+        ax.set_ylabel("Validation bpc")
+        ax.set_xlim(0, 30000)
+        ax.set_ylim(0, 1)
+        ax.set_yticks([])
+        ax.text(0.5, 0.5, f"{label}\nresults pending", transform=ax.transAxes,
+                ha="center", va="center", fontsize=13, color="#B03030")
+        minor_grid(ax)
     fig.savefig(out)
     fig.savefig(out.with_suffix(".png"), dpi=150)
     plt.close(fig)
@@ -269,14 +267,27 @@ def fig_crossover(out):
 
 # ---------------------------------------------------------------- tables
 def tex_main_results(path):
-    """One row per optimizer, one column per task, mean +/- sd over seeds."""
+    """One row per optimizer, one column per task: mean +/- sd over seeds, with
+    paired-vs-AdamW markers. ^ = better than AdamW, v = worse, both at twice the
+    paired standard error; no mark = not separated. This is the single
+    comparison table; the per-pair detail lives in the logs."""
     cols = list(TASKS)
     vals = {t: finals(t, TASKS[t][0]) for t in cols}
     hf = headline_fid()
     if hf:
         vals["celeba64"] = hf
-    # bold only when every optimizer on that task has all 3 seeds; a best
-    # picked among a partial set is not a best
+    marks = {}
+    for t in cols:
+        tab = by_seed(t, TASKS[t][0])
+        if t == "celeba64":
+            # markers on the monitor FID: the headline lacks 3 seeds for most
+            pass
+        p = paired("adamw", tab)
+        m = {}
+        for o, (d, se, _) in p.items():
+            if abs(d) > 2 * se:
+                m[o] = r"$^{\uparrow}$" if d < 0 else r"$^{\downarrow}$"
+        marks[t] = m
     best = {t: (min(st.mean(v) for v in vals[t].values())
                 if vals[t] and len(vals[t]) == len(OPTS)
                 and all(len(v) >= 3 for v in vals[t].values()) else None)
@@ -296,12 +307,13 @@ def tex_main_results(path):
                 continue
             nd = 4 if TASKS[t][0] == "eval_bpc" else 2
             m = st.mean(v)
-            if len(v) < 3:            # still running: show it, but flag it as partial
+            if len(v) < 3:
                 row.append(rf"\pending{{{m:.{nd}f}\,({len(v)} seed)}}")
                 continue
             cell = f"{m:.{nd}f} $\\pm$ {st.stdev(v):.{nd}f}"
             if best[t] is not None and abs(m - best[t]) < 1e-12:
                 cell = r"\textbf{" + cell + "}"
+            cell += marks.get(t, {}).get(o, "")
             row.append(cell)
         L.append(" & ".join(row) + r" \\")
     L += [r"\bottomrule", r"\end{tabular}"]
@@ -459,8 +471,9 @@ def tex_tasks(path):
         shape = (f"{g('n_layer')}L/{g('d_model')}d/{g('n_head')}h"
                  if g("n_layer") else "UNet, ch 128")
         ctx = g("block_size") or f"{g('image_size')}px"
-        rows.append((pretty, g("diffusion"), nparam, shape, g("batch_size"), ctx,
-                     BENCH_ITERS.get(t), c["max_iters"]["value"]))
+        rows.append((pretty, str(g("diffusion")).upper(), nparam, shape,
+                     g("batch_size"), ctx, BENCH_ITERS.get(t),
+                     c["max_iters"]["value"]))
     L = [r"\begin{tabular}{llrlrrrr}", r"\toprule",
          r"task & scheme & params & shape & batch & ctx & steps & tune steps \\",
          r"\midrule"]
@@ -493,21 +506,37 @@ def _searched(task, opt):
             if hasattr(d, "choices")}
 
 
+def _fmt_vals(vs):
+    def one(v):
+        f = float(v)
+        if f == 0:
+            return "0"
+        if abs(f) >= 0.01:
+            return f"{f:g}"
+        mant, exp = f"{f:.0e}".split("e-")
+        return rf"{mant}\!\cdot\!10^{{-{int(exp)}}}"
+    return r"\{" + ", ".join(one(v) for v in sorted(float(x) for x in vs)) + r"\}"
+
+
 def tex_grid(path):
-    """Per-optimizer swept axes and grid size, from what each study searched."""
+    """Optimizer-specific axes with the exact value sets each study searched.
+    The three shared axes are stated in the appendix prose."""
     SHARED = {"lr", "weight_decay", "grad_clip"}
-    L = [r"\begin{tabular}{llrr}", r"\toprule",
-         r"optimizer & optimizer-specific axes & grid & trials \\", r"\midrule"]
+    L = [r"\begin{tabular}{lll}", r"\toprule",
+         r"optimizer & axis & values \\", r"\midrule"]
     for o in OPTS:
         sw = _searched("text8", o)
         if not sw:
             continue
-        n = 1
-        for v in sw.values():
-            n *= len(v)
-        extra = ", ".join(f"\\texttt{{{k.replace(chr(95), chr(92) + chr(95))}}} ({len(v)})"
-                          for k, v in sorted(sw.items()) if k not in SHARED)
-        L.append(f"{NAME[o]} & \\scriptsize {extra} & {n} & 100 \\\\")
+        own = {k: v for k, v in sorted(sw.items()) if k not in SHARED}
+        first = True
+        for k, v in own.items():
+            name = NAME[o] if first else ""
+            first = False
+            axis = r"\texttt{" + k.replace("_", r"\_") + "}"
+            L.append(f"{name} & {axis} & ${_fmt_vals(v)}$ \\\\")
+        if not own:
+            L.append(f"{NAME[o]} & --- & --- \\\\")
     L += [r"\bottomrule", r"\end{tabular}"]
     path.write_text("\n".join(L) + "\n")
 
@@ -557,20 +586,22 @@ def main():
     fig.mkdir(parents=True, exist_ok=True)
     tab.mkdir(parents=True, exist_ok=True)
     made = []
-    if fig_curves("celeba64", "eval_fid", "FID", fig / "celeba_curves.pdf"):
-        made.append("celeba_curves")
-    if fig_curves("qm9", "eval_bpc", "Validation bpc", fig / "qm9_curves.pdf"):
+    if fig_task("text8", "eval_bpc", "Validation bpc", fig / "text8_curves.pdf"):
+        made.append("text8_curves")
+    if fig_task("qm9", "eval_bpc", "Validation bpc", fig / "qm9_curves.pdf"):
         made.append("qm9_curves")
-    if not fig_curves("lm1b", "eval_bpc", "Validation bpc", fig / "lm1b_curves.pdf"):
+    if fig_task("celeba64", "eval_fid", "FID", fig / "celeba_curves.pdf",
+                second="eval_loss"):
+        made.append("celeba_curves")
+    if not fig_task("lm1b", "eval_bpc", "Validation bpc", fig / "lm1b_curves.pdf"):
         fig_placeholder(fig / "lm1b_curves.pdf", "LM1B (DUO)")
         made.append("lm1b_curves (placeholder)")
     else:
         made.append("lm1b_curves")
-    if fig_text8_pair(fig / "text8_panels.pdf"):
-        made.append("text8_panels")
     tex_main_results(tab / "main_results.tex")
     tex_paired(tab / "paired_text8.tex")
     tex_paired(tab / "paired_celeba.tex", "celeba64", "eval_fid")
+    tex_paired(tab / "paired_qm9.tex", "qm9")
     ndev = tex_grid_dev(tab / "grid_dev.tex")
     print(f"grid deviations from the common axes: {ndev}")
     tex_cost(tab / "cost.tex")
