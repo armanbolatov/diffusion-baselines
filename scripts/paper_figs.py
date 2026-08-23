@@ -30,15 +30,17 @@ TASKS = {"text8": ("eval_bpc", "text8 (MDLM)"),
          "qm9": ("eval_bpc", "QM9 (UDLM)"),
          "lm1b": ("eval_bpc", "LM1B (DUO)"),
          "celeba64": ("eval_fid", "CelebA-64 (DDPM)")}
-COLORS = dict(zip(OPTS, plt.cm.tab10.colors))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _style import (apply_style, PALETTE, MARKERS, LW, S_LINE,  # noqa: E402
+                    minor_grid, shared_legend)
+
+apply_style()
+COLORS = PALETTE
+
 PEND = r"\pending{--}"
 # LaTeX macro names cannot contain digits, so task keys need letter-only aliases
 MACRO = {"text8": "TextEight", "qm9": "QMNine",
          "lm1b": "LMOneB", "celeba64": "CelebaSixtyFour"}
-
-plt.rcParams.update({"font.size": 8, "axes.titlesize": 9, "axes.labelsize": 8,
-                     "legend.fontsize": 7, "figure.dpi": 150,
-                     "axes.grid": True, "grid.alpha": 0.3})
 
 
 def curves(task, metric):
@@ -121,38 +123,85 @@ def paired(base, tab):
 
 
 # ---------------------------------------------------------------- figures
-def fig_curves(task, metric, ylabel, out, logy=False):
+def fig_curves(task, metric, ylabel, out, logy=None):
+    """Metric against training step, mean over seeds with a +/-1 sd band.
+
+    logy=None picks the scale from the data: log only when the quantity spans
+    at least a decade, otherwise the tick labels degenerate to two entries.
+    """
     c = curves(task, metric)
     if not c:
         return False
-    fig, (ax, axb) = plt.subplots(1, 2, figsize=(6.6, 2.4),
-                                  gridspec_kw={"width_ratios": [1.5, 1]})
-    fin = []
+    vals = [v for o in c for i in c[o] for v in c[o][i] if v > 0]
+    if logy is None:
+        logy = bool(vals) and max(vals) / min(vals) >= 10
+    fig, ax = plt.subplots(figsize=(5.4, 3.2), constrained_layout=True)
     for o in OPTS:
         if o not in c:
             continue
         its = sorted(c[o])
         m = [st.mean(c[o][i]) for i in its]
         sd = [st.stdev(c[o][i]) if len(c[o][i]) > 1 else 0 for i in its]
-        ax.plot(its, m, color=COLORS[o], lw=1.3, label=NAME[o])
+        ax.plot(its, m, color=COLORS[o], lw=LW, label=NAME[o])
         ax.fill_between(its, [a - b for a, b in zip(m, sd)],
-                        [a + b for a, b in zip(m, sd)], color=COLORS[o], alpha=0.15)
-        fin.append((m[-1], sd[-1], o))
-    ax.set_xlabel("training step")
+                        [a + b for a, b in zip(m, sd)],
+                        color=COLORS[o], alpha=0.15, lw=0)
+        # a few markers so the series is readable without relying on colour
+        step = max(1, len(its) // 6)
+        ax.scatter(its[::step], m[::step], color=COLORS[o],
+                   marker=MARKERS[o], s=S_LINE, zorder=3)
+    ax.set_xlabel("Training step")
     ax.set_ylabel(ylabel)
     ax.set_xlim(left=0)
     if logy:
         ax.set_yscale("log")
-    ax.legend(ncol=2, loc="upper right")
-    fin.sort()
-    axb.barh([NAME[o] for _, _, o in fin][::-1], [v for v, _, _ in fin][::-1],
-             xerr=[e for _, e, _ in fin][::-1],
-             color=[COLORS[o] for _, _, o in fin][::-1], alpha=0.85, capsize=2)
-    axb.set_xlabel(f"final {ylabel}")
-    lo = min(v for v, _, _ in fin)
-    axb.set_xlim(left=lo * 0.97)
-    fig.tight_layout()
-    fig.savefig(out, bbox_inches="tight")
+    minor_grid(ax)
+    shared_legend(fig, ax, ncols=4)
+    fig.savefig(out)
+    fig.savefig(out.with_suffix(".png"), dpi=150)
+    plt.close(fig)
+    return True
+
+
+def fig_text8_pair(out):
+    """Two panels sharing one legend: the whole run, and the last half where the
+    Schedule-Free crossover happens."""
+    c = curves("text8", "eval_bpc")
+    if not c:
+        return False
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(9.6, 3.4), constrained_layout=True)
+    for ax, lo in ((a1, 0), (a2, 15000)):
+        for o in OPTS:
+            if o not in c:
+                continue
+            its = sorted(i for i in c[o] if i >= lo)
+            if not its:
+                continue
+            m = [st.mean(c[o][i]) for i in its]
+            sd = [st.stdev(c[o][i]) if len(c[o][i]) > 1 else 0 for i in its]
+            lead = o == "schedule_free"
+            ax.plot(its, m, color=COLORS[o], lw=LW, label=NAME[o],
+                    ls="-" if (lo and lead) else "-" if not lo else "--",
+                    alpha=1.0 if (not lo or lead) else 0.8)
+            if not lo:
+                ax.fill_between(its, [x - y for x, y in zip(m, sd)],
+                                [x + y for x, y in zip(m, sd)],
+                                color=COLORS[o], alpha=0.15, lw=0)
+            step = max(1, len(its) // 6)
+            ax.scatter(its[::step], m[::step], color=COLORS[o],
+                       marker=MARKERS[o], s=S_LINE, zorder=3,
+                       alpha=1.0 if (not lo or lead) else 0.8)
+        ax.set_xlabel("Training step")
+        minor_grid(ax)
+    a1.set_ylabel("Validation bpc")
+    a1.set_xlim(left=0)
+    a1.text(0.5, 0.94, "full run", transform=a1.transAxes, ha="center",
+            va="top", fontsize=12, color="#2A2A2A")
+    a2.text(0.5, 0.94, "last half", transform=a2.transAxes, ha="center",
+            va="top", fontsize=12, color="#2A2A2A")
+    shared_legend(fig, a1, ncols=7)
+    fig.savefig(out)
+    fig.savefig(out.with_suffix(".png"), dpi=150)
     plt.close(fig)
     return True
 
@@ -162,80 +211,25 @@ def fig_crossover(out):
     c = curves("text8", "eval_bpc")
     if not c:
         return False
-    fig, ax = plt.subplots(figsize=(3.3, 2.4))
+    fig, ax = plt.subplots(figsize=(5.4, 3.2), constrained_layout=True)
     for o in OPTS:
         if o not in c:
             continue
         its = sorted(i for i in c[o] if i >= 15000)
-        ax.plot(its, [st.mean(c[o][i]) for i in its], color=COLORS[o],
-                lw=1.6 if o == "schedule_free" else 1.0,
-                ls="-" if o == "schedule_free" else "--",
-                label=NAME[o], alpha=1.0 if o == "schedule_free" else 0.75)
-    ax.set_xlabel("training step")
-    ax.set_ylabel("eval bpc")
-    ax.legend(ncol=2, fontsize=6)
-    fig.tight_layout()
-    fig.savefig(out, bbox_inches="tight")
-    plt.close(fig)
-    return True
-
-
-def fig_loss_vs_quality(out):
-    """CelebA: denoising loss and FID order the optimizers differently."""
-    ls, fd = finals("celeba64", "eval_loss"), finals("celeba64", "eval_fid")
-    common = [o for o in OPTS if o in ls and o in fd]
-    if len(common) < 3:
-        return False
-    lm = {o: st.mean(ls[o]) for o in common}
-    fm = {o: st.mean(fd[o]) for o in common}
-    lr = {o: i for i, o in enumerate(sorted(common, key=lambda o: lm[o]))}
-    fr = {o: i for i, o in enumerate(sorted(common, key=lambda o: fm[o]))}
-    fig, ax = plt.subplots(figsize=(3.3, 2.6))
-    for o in common:
-        ax.plot([0, 1], [lr[o], fr[o]], "-o", color=COLORS[o], ms=4, lw=1.4)
-        ax.text(-0.04, lr[o], NAME[o], ha="right", va="center", fontsize=7)
-        ax.text(1.04, fr[o], f"{NAME[o]} {fm[o]:.1f}", ha="left", va="center", fontsize=7)
-    ax.set_xticks([0, 1])
-    ax.set_xticklabels(["denoising MSE", "FID"])
-    ax.set_xlim(-0.80, 2.05)
-    ax.invert_yaxis()
-    ax.set_yticks([])
-    ax.set_ylabel("rank (best at top)")
-    ax.grid(False)
-    tau = kendall([lm[o] for o in common], [fm[o] for o in common])
-    ax.set_title(rf"Kendall $\tau$ = {tau:+.2f}")
-    fig.tight_layout()
-    fig.savefig(out, bbox_inches="tight")
-    plt.close(fig)
-    return True
-
-
-def fig_cross_task(out):
-    """Final metric per task, normalised so tuned AdamW = 1."""
-    data = {}
-    for t, (metric, pretty) in TASKS.items():
-        f = finals(t, metric)
-        if "adamw" in f and len(f) >= 3:
-            base = st.mean(f["adamw"])
-            data[pretty] = {o: st.mean(v) / base for o, v in f.items()}
-    if not data:
-        return False
-    fig, ax = plt.subplots(figsize=(6.6, 2.3))
-    tasks = list(data)
-    w = 0.11
-    for k, o in enumerate(OPTS):
-        xs = [i + (k - 3) * w for i in range(len(tasks))]
-        ys = [data[t].get(o, float("nan")) for t in tasks]
-        ax.bar(xs, ys, width=w, color=COLORS[o], label=NAME[o])
-    ax.axhline(1.0, color="k", lw=0.8, ls=":")
-    ax.set_xticks(range(len(tasks)))
-    ax.set_xticklabels(tasks)
-    ax.set_ylabel("metric / tuned AdamW")
-    lo = min(v for d in data.values() for v in d.values())
-    ax.set_ylim(min(0.95, lo * 0.98), max(1.15, max(v for d in data.values() for v in d.values()) * 1.02))
-    ax.legend(ncol=7, fontsize=6, loc="upper center", bbox_to_anchor=(0.5, 1.22))
-    fig.tight_layout()
-    fig.savefig(out, bbox_inches="tight")
+        m = [st.mean(c[o][i]) for i in its]
+        lead = o == "schedule_free"
+        ax.plot(its, m, color=COLORS[o], lw=LW, label=NAME[o],
+                ls="-" if lead else "--", alpha=1.0 if lead else 0.8)
+        step = max(1, len(its) // 5)
+        ax.scatter(its[::step], m[::step], color=COLORS[o],
+                   marker=MARKERS[o], s=S_LINE, zorder=3,
+                   alpha=1.0 if lead else 0.8)
+    ax.set_xlabel("Training step")
+    ax.set_ylabel("Validation bpc")
+    minor_grid(ax)
+    shared_legend(fig, ax, ncols=4)
+    fig.savefig(out)
+    fig.savefig(out.with_suffix(".png"), dpi=150)
     plt.close(fig)
     return True
 
@@ -524,18 +518,12 @@ def main():
     fig.mkdir(parents=True, exist_ok=True)
     tab.mkdir(parents=True, exist_ok=True)
     made = []
-    if fig_curves("text8", "eval_bpc", "eval bpc", fig / "text8_curves.pdf", logy=True):
-        made.append("text8_curves")
     if fig_curves("celeba64", "eval_fid", "FID", fig / "celeba_curves.pdf"):
         made.append("celeba_curves")
-    if fig_curves("qm9", "eval_bpc", "eval bpc", fig / "qm9_curves.pdf", logy=True):
+    if fig_curves("qm9", "eval_bpc", "Validation bpc", fig / "qm9_curves.pdf"):
         made.append("qm9_curves")
-    if fig_crossover(fig / "text8_crossover.pdf"):
-        made.append("text8_crossover")
-    if fig_loss_vs_quality(fig / "celeba_loss_vs_fid.pdf"):
-        made.append("celeba_loss_vs_fid")
-    if fig_cross_task(fig / "cross_task.pdf"):
-        made.append("cross_task")
+    if fig_text8_pair(fig / "text8_panels.pdf"):
+        made.append("text8_panels")
     tex_main_results(tab / "main_results.tex")
     tex_paired(tab / "paired_text8.tex")
     tex_paired(tab / "paired_celeba.tex", "celeba64", "eval_fid")
