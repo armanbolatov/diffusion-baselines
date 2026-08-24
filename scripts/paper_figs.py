@@ -279,9 +279,14 @@ def tex_main_results(path):
     marks = {}
     for t in cols:
         tab = by_seed(t, TASKS[t][0])
-        if t == "celeba64":
-            # markers on the monitor FID: the headline lacks 3 seeds for most
-            pass
+        if t == "celeba64" and hf and all(len(v) >= 3 for v in hf.values()):
+            # headline FID has all seeds: pair on the reported metric itself
+            import json as _json
+            tab = {}
+            for tag, v in _json.loads(Path("logs/fid_celeba.json").read_text()).items():
+                if v.get("n", 0) >= 50000:
+                    o, seed = tag.rsplit("_seed", 1)
+                    tab.setdefault(o, {})[seed.split("_")[0]] = v["fid"]
         p = paired("adamw", tab)
         m = {}
         for o, (d, se, _) in p.items():
