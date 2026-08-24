@@ -31,7 +31,7 @@ TASKS = {"text8": ("eval_bpc", "text8 (MDLM)"),
          "lm1b": ("eval_bpc", "LM1B (DUO)"),
          "celeba64": ("eval_fid", "CelebA-64 (DDPM)")}
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _style import (apply_style, PALETTE, MARKERS, LW, S_LINE,  # noqa: E402
+from _style import (apply_style, PALETTE, MARKERS, LINESTYLES, LW, S_LINE,  # noqa: E402
                     minor_grid, shared_legend)
 
 apply_style()
@@ -157,7 +157,7 @@ def fig_curves(task, metric, ylabel, out, logy=None):
         its = sorted(c[o])
         m = [st.mean(c[o][i]) for i in its]
         sd = [st.stdev(c[o][i]) if len(c[o][i]) > 1 else 0 for i in its]
-        ax.plot(its, m, color=COLORS[o], lw=LW, label=NAME[o])
+        ax.plot(its, m, color=COLORS[o], lw=LW, ls=LINESTYLES[o], label=NAME[o])
         ax.fill_between(its, [a - b for a, b in zip(m, sd)],
                         [a + b for a, b in zip(m, sd)],
                         color=COLORS[o], alpha=0.15, lw=0)
@@ -178,9 +178,30 @@ def fig_curves(task, metric, ylabel, out, logy=None):
     return True
 
 
+def _plain_log_ticks(ax):
+    """Plain numbers on a log axis. Minor ticks are labeled only when the axis
+    spans less than a decade, where majors alone leave it nearly unlabeled;
+    on wider ranges labeled minors collide."""
+    import math
+    from matplotlib.ticker import NullFormatter, ScalarFormatter
+    f = ScalarFormatter(); f.set_scientific(False)
+    ax.yaxis.set_major_formatter(f)
+    lo, hi = ax.get_ylim()
+    span = math.log10(hi / lo) if lo > 0 else 99
+    fm = ScalarFormatter(); fm.set_scientific(False)
+    if span < 1:                      # label every minor, majors are too sparse
+        ax.yaxis.set_minor_formatter(fm)
+    elif span < 2.5:                  # label only the 2x and 5x minors
+        from matplotlib.ticker import LogLocator
+        ax.yaxis.set_minor_locator(LogLocator(subs=(2.0, 5.0)))
+        ax.yaxis.set_minor_formatter(fm)
+    else:
+        ax.yaxis.set_minor_formatter(NullFormatter())
+
+
 def _panel(ax, xs_ys, ylabel, xlabel, logy=False):
     for o, xs, ys, sd in xs_ys:
-        ax.plot(xs, ys, color=COLORS[o], lw=LW, label=NAME[o])
+        ax.plot(xs, ys, color=COLORS[o], lw=LW, ls=LINESTYLES[o], label=NAME[o])
         if sd is not None:
             ax.fill_between(xs, [a - b for a, b in zip(ys, sd)],
                             [a + b for a, b in zip(ys, sd)],
@@ -193,9 +214,11 @@ def _panel(ax, xs_ys, ylabel, xlabel, logy=False):
     if logy:
         ax.set_yscale("log")
     minor_grid(ax)
+    if logy:
+        _plain_log_ticks(ax)   # after minor_grid: minorticks_on() resets locators
 
 
-def fig_task(task, metric, ylabel, out, second="flops"):
+def fig_task(task, metric, ylabel, out, second="flops", logy=None, ymax=None):
     """Two panels sharing a legend: metric vs steps, and either metric vs
     cumulative compute (second='flops') or a second metric (second=<metric>).
 
@@ -206,10 +229,9 @@ def fig_task(task, metric, ylabel, out, second="flops"):
     c = curves(task, metric)
     if not c:
         return False
-    logy = False
-    vals = [v for o in c for i in c[o] for v in c[o][i] if v > 0]
-    if vals and max(vals) / min(vals) >= 10:
-        logy = True
+    if logy is None:
+        vals = [v for o in c for i in c[o] for v in c[o][i] if v > 0]
+        logy = bool(vals) and max(vals) / min(vals) >= 10
     fl = json.loads(Path("logs/flops.json").read_text()).get(task, {}) if second == "flops" else {}
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(9.6, 3.1), constrained_layout=True)
     series = []
@@ -222,10 +244,14 @@ def fig_task(task, metric, ylabel, out, second="flops"):
         series.append((o, its, m, sd))
     _panel(a1, series, ylabel, "Training step", logy)
     a1.set_xlim(left=0)
+    if ymax is not None:
+        a1.set_ylim(top=ymax)
     if second == "flops":
-        conv = [(o, [i * fl[o] / 1e15 for i in xs], m, None)
-                for o, xs, m, _ in series if o in fl]
+        conv = [(o, [i * fl[o] / 1e15 for i in xs], m, sd)
+                for o, xs, m, sd in series if o in fl]
         _panel(a2, conv, ylabel, "Training compute (PFLOPs)", logy)
+        if ymax is not None:
+            a2.set_ylim(top=ymax)
     else:
         c2 = curves(task, second)
         s2 = []
@@ -237,7 +263,7 @@ def fig_task(task, metric, ylabel, out, second="flops"):
             sd = [st.stdev(c2[o][i]) if len(c2[o][i]) > 1 else 0 for i in its]
             s2.append((o, its, m, sd))
         _panel(a2, s2, {"eval_loss": "Denoising MSE"}.get(second, second),
-               "Training step", False)
+               "Training step", second == "eval_loss")
         a2.set_xlim(left=0)
     shared_legend(fig, a1, ncols=7)
     fig.savefig(out)
@@ -407,7 +433,7 @@ def tex_winners(path):
         d = json.loads(w.read_text())
         for i, o in enumerate([o for o in OPTS if o in d]):
             p = d[o]["params"]
-            extra = ", ".join(f"{k.replace(chr(95), chr(92) + chr(95))}={p[k]}" for k in
+            extra = ", ".join(r"\texttt{" + f"{k.replace(chr(95), chr(92) + chr(95))}={p[k]}" + "}" for k in
                               ("adamw_lr", "momentum", "nesterov", "gamma",
                                "precondition_frequency", "beta1", "beta2") if k in p)
             L.append(f"{TASKS[t][1] if i == 0 else ''} & {NAME[o]} & {p['lr']:g} & "
@@ -520,14 +546,16 @@ def _fmt_vals(vs):
             return f"{f:g}"
         mant, exp = f"{f:.0e}".split("e-")
         return rf"{mant}\!\cdot\!10^{{-{int(exp)}}}"
-    return r"\{" + ", ".join(one(v) for v in sorted(float(x) for x in vs)) + r"\}"
+    # separate $...$ per value so a p{} column can break the line between them
+    return (r"$\{$" + ", ".join(f"${one(v)}$" for v in sorted(float(x) for x in vs))
+            + r"$\}$")
 
 
 def tex_grid(path):
     """Optimizer-specific axes with the exact value sets each study searched.
     The three shared axes are stated in the appendix prose."""
     SHARED = {"lr", "weight_decay", "grad_clip"}
-    L = [r"\begin{tabular}{lll}", r"\toprule",
+    L = [r"\begin{tabular}{llp{7.6cm}}", r"\toprule",
          r"optimizer & axis & values \\", r"\midrule"]
     for o in OPTS:
         sw = _searched("text8", o)
@@ -539,7 +567,7 @@ def tex_grid(path):
             name = NAME[o] if first else ""
             first = False
             axis = r"\texttt{" + k.replace("_", r"\_") + "}"
-            L.append(f"{name} & {axis} & ${_fmt_vals(v)}$ \\\\")
+            L.append(f"{name} & {axis} & {_fmt_vals(v)} \\\\")
         if not own:
             L.append(f"{NAME[o]} & --- & --- \\\\")
     L += [r"\bottomrule", r"\end{tabular}"]
@@ -591,14 +619,17 @@ def main():
     fig.mkdir(parents=True, exist_ok=True)
     tab.mkdir(parents=True, exist_ok=True)
     made = []
-    if fig_task("text8", "eval_bpc", "Validation bpc", fig / "text8_curves.pdf"):
+    if fig_task("text8", "eval_bpc", "Validation bpc", fig / "text8_curves.pdf",
+                logy=True, ymax=2.5):
         made.append("text8_curves")
-    if fig_task("qm9", "eval_bpc", "Validation bpc", fig / "qm9_curves.pdf"):
+    if fig_task("qm9", "eval_bpc", "Validation bpc", fig / "qm9_curves.pdf",
+                logy=True, ymax=1.3):
         made.append("qm9_curves")
     if fig_task("celeba64", "eval_fid", "FID", fig / "celeba_curves.pdf",
                 second="eval_loss"):
         made.append("celeba_curves")
-    if not fig_task("lm1b", "eval_bpc", "Validation bpc", fig / "lm1b_curves.pdf"):
+    if not fig_task("lm1b", "eval_bpc", "Validation bpc", fig / "lm1b_curves.pdf",
+                    logy=True):
         fig_placeholder(fig / "lm1b_curves.pdf", "LM1B (DUO)")
         made.append("lm1b_curves (placeholder)")
     else:

@@ -21,10 +21,15 @@ PALETTE = {
     "muon":          "#029e73",   # green
     "soap":          "#de8f05",   # orange
     "schedule_free": "#cc78bc",   # pink-purple
-    "mars":          "#ca9161",   # tan
-    "mars_m":        "#56b4e9",   # light blue
+    "mars":          "#d55e00",   # AdamW family: same colour, dashed line
+    "mars_m":        "#029e73",   # Muon family: same colour, dashed line
     "reference":     "#949494",   # gray, reserved for references and baselines
 }
+
+# Line style pairs with the colour: the two MARS variants share their base
+# optimizer's colour (MARS wraps AdamW, MARS-M wraps Muon) and dash instead.
+LINESTYLES = {o: "--" if o in ("mars", "mars_m") else "-" for o in
+              ("adamw", "lion", "muon", "soap", "schedule_free", "mars", "mars_m")}
 
 # One marker shape per method, fixed alongside the colour.
 MARKERS = {
