@@ -18,10 +18,14 @@ NAME = {"adamw": "AdamW", "lion": "Lion", "muon": "Muon",
 SEED = 42          # sampling seed AND the benchmark seed whose ckpt we load
 
 
-def load(ckpt, model, device):
+def load(ckpt, model, device, use_ema):
+    """Match each task's benchmark eval protocol: celeba64 evaluated EMA weights
+    (ema_eval=1); text8/qm9 evaluated raw weights, and for Schedule-Free the EMA
+    buffer averages train-mode iterates, so EMA there is the wrong sequence."""
     import torch
     payload = torch.load(ckpt, map_location=device, weights_only=False)
-    model.load_state_dict(payload.get("ema_state") or payload["model_state"])
+    state = payload["ema_state"] if use_ema and payload.get("ema_state") else payload["model_state"]
+    model.load_state_dict(state)
     return model.eval()
 
 
@@ -39,11 +43,12 @@ def celeba(out_pdf, device):
     g = torch.Generator(device="cpu").manual_seed(SEED)
     noise0 = torch.randn(n, 3, 64, 64, generator=g).to(device)
 
-    fig, axes = plt.subplots(len(OPTS), n, figsize=(n * 1.5, len(OPTS) * 1.5))
+    # horizontal: optimizers as columns (ordered as the main table), draws as rows
+    fig, axes = plt.subplots(n, len(OPTS), figsize=(len(OPTS) * 1.5, n * 1.5))
     for r, opt in enumerate(OPTS):
         ckpt = Path("exps_bench/celeba64", opt, f"seed{SEED}", "ckpt.pt")
         model = build_image_model(ap.Namespace(dropout=0.0), sample_size=64).to(device)
-        load(ckpt, model, device)
+        load(ckpt, model, device, use_ema=True)
         x = noise0.clone()
         with torch.no_grad():
             for t in sched.timesteps:
@@ -53,13 +58,12 @@ def celeba(out_pdf, device):
                 x = sched.step(eps.float(), t, x).prev_sample
         x = ((x.clamp(-1, 1) + 1) / 2).cpu().permute(0, 2, 3, 1).numpy()
         for c in range(n):
-            ax = axes[r, c]
+            ax = axes[c, r]
             ax.imshow(x[c])
             ax.set_xticks([]); ax.set_yticks([])
             for s in ax.spines.values():
                 s.set_visible(False)
-        axes[r, 0].set_ylabel(NAME[opt], rotation=0, ha="right", va="center",
-                              fontsize=9)
+        axes[0, r].set_title(NAME[opt], fontsize=9)
         del model
         torch.cuda.empty_cache()
         print(f"  celeba {opt} done", flush=True)
@@ -103,7 +107,7 @@ def text8(out_tex, device):
         ckpt = Path("exps_bench/text8", opt, f"seed{SEED}", "ckpt.pt")
         model = DiffTransformer(vocab_size=VOCAB_SIZE, block_size=256,
                                 n_layer=8, n_head=8, d_model=256).to(device)
-        load(ckpt, model, device)
+        load(ckpt, model, device, use_ema=False)
         torch.manual_seed(SEED)
         ids = mdlm_sample(model, n=1, length=256, n_steps=256, device=device)
         txt = decode(ids[0].cpu().numpy())[:64]
@@ -133,9 +137,12 @@ def qm9(out_tex, quality_tex, device):
          r"\midrule"]
     for opt in OPTS:
         ckpt = Path("exps_bench/qm9", opt, f"seed{SEED}", "ckpt.pt")
+        # time_emb_dim=128 matches configs/qm9/common.yaml; omitting it defaults
+        # to 4*d_model and the AdaLN shapes no longer match the checkpoint.
         model = DiffTransformer(vocab_size=tok.vocab_size, block_size=32,
-                                n_layer=12, n_head=12, d_model=768).to(device)
-        load(ckpt, model, device)
+                                n_layer=12, n_head=12, d_model=768,
+                                time_emb_dim=128).to(device)
+        load(ckpt, model, device, use_ema=False)
         torch.manual_seed(SEED)
         ids = udlm.sample(model, n_samples=1024, length=32, n_steps=128,
                           vocab_size=tok.vocab_size, device=device)
