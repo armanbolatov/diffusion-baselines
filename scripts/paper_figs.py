@@ -74,9 +74,8 @@ def finals(task, metric):
 
 
 def headline_fid():
-    """{opt: [FID per seed]} from logs/fid_celeba.json: 50k samples, EMA, train
-    reference. This is the reportable CelebA number; eval_fid in the logs is the
-    10k-sample training monitor."""
+    """{opt: [FID per seed]} from logs/fid_celeba.json (50k-sample headline;
+    eval_fid in the run logs is the 10k training monitor)."""
     p = Path("logs/fid_celeba.json")
     if not p.exists():
         return {}
@@ -139,11 +138,8 @@ def paired(base, tab):
 
 # ---------------------------------------------------------------- figures
 def fig_curves(task, metric, ylabel, out, logy=None):
-    """Metric against training step, mean over seeds with a +/-1 sd band.
-
-    logy=None picks the scale from the data: log only when the quantity spans
-    at least a decade, otherwise the tick labels degenerate to two entries.
-    """
+    """Metric vs step, mean over seeds with a +/-1 sd band. logy=None: log
+    scale only when the data spans at least a decade."""
     c = curves(task, metric)
     if not c:
         return False
@@ -196,13 +192,8 @@ def _panel(ax, xs_ys, ylabel, xlabel, logy=False):
 
 
 def fig_task(task, metric, ylabel, out, second="flops"):
-    """Two panels sharing a legend: metric vs steps, and either metric vs
-    cumulative compute (second='flops') or a second metric (second=<metric>).
-
-    FLOPs differ by at most 7% across optimizers here, so the compute panel
-    nearly reproduces the step panel; it is included because steps hide even
-    that difference, while wall-clock (Table cost) is implementation-bound.
-    """
+    """Two panels, one legend: metric vs steps, plus metric vs cumulative
+    compute (second='flops') or a second metric (second=<metric>)."""
     c = curves(task, metric)
     if not c:
         return False
@@ -247,8 +238,7 @@ def fig_task(task, metric, ylabel, out, second="flops"):
 
 
 def fig_placeholder(out, label):
-    """Two empty panels in the paper's style, so the layout is final before the
-    data lands."""
+    """Two empty styled panels holding the layout until the data lands."""
     fig, axes = plt.subplots(1, 2, figsize=(9.6, 3.1), constrained_layout=True)
     for ax in axes:
         ax.set_xlabel("Training step")
@@ -267,10 +257,8 @@ def fig_placeholder(out, label):
 
 # ---------------------------------------------------------------- tables
 def tex_main_results(path):
-    """One row per optimizer, one column per task: mean +/- sd over seeds, with
-    paired-vs-AdamW markers. ^ = better than AdamW, v = worse, both at twice the
-    paired standard error; no mark = not separated. This is the single
-    comparison table; the per-pair detail lives in the logs."""
+    """Main table: mean +/- sd per (optimizer, task), arrows = paired-vs-AdamW
+    difference beyond 2 SE."""
     cols = list(TASKS)
     vals = {t: finals(t, TASKS[t][0]) for t in cols}
     hf = headline_fid()
@@ -476,11 +464,11 @@ def tex_tasks(path):
         shape = (f"{g('n_layer')}L/{g('d_model')}d/{g('n_head')}h"
                  if g("n_layer") else "UNet, ch 128")
         ctx = g("block_size") or f"{g('image_size')}px"
-        rows.append((pretty, str(g("diffusion")).upper(), nparam, shape,
+        rows.append((pretty, nparam, shape,
                      g("batch_size"), ctx, BENCH_ITERS.get(t),
                      c["max_iters"]["value"]))
-    L = [r"\begin{tabular}{llrlrrrr}", r"\toprule",
-         r"task & scheme & params & shape & batch & ctx & steps & tune steps \\",
+    L = [r"\begin{tabular}{lrlrrrr}", r"\toprule",
+         r"task & params & shape & batch & ctx & steps & tune steps \\",
          r"\midrule"]
     for r in rows:
         L.append(" & ".join(str(x) for x in r) + r" \\")
@@ -489,12 +477,8 @@ def tex_tasks(path):
 
 
 def _searched(task, opt):
-    """The grid a study ACTUALLY searched, from its trials' distributions.
-
-    Reading today's config instead would describe a grid that may have been
-    edited after the study ran, which is how an edge winner can be made to look
-    interior. Same reason audit_edges.py reads distributions.
-    """
+    """Grid a study actually searched (trial distributions, not today's config,
+    which may have been edited since the study ran)."""
     import optuna
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     try:
@@ -547,12 +531,7 @@ def tex_grid(path):
 
 
 def tex_grid_dev(path):
-    """Every place a study's shared axes departed from the common grid.
-
-    The appendix claims one shared grid across all tasks; wherever that is not
-    true the paper has to say so, so this table is generated rather than
-    asserted.
-    """
+    """Table of every study whose shared axes differ from the common grid."""
     COMMON = {"lr": [1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2],
               "weight_decay": [0, 0.01, 0.1, 0.3, 1, 3],
               "grad_clip": [0, 1.0]}

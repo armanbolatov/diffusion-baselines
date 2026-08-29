@@ -1,9 +1,8 @@
-"""Qualitative samples for the paper appendix, one shared seed per task.
+"""Qualitative samples for the paper, one fixed seed per task.
 
-Writes into the Overleaf checkout:
-    figures/celeba_samples.pdf   7x4 face grid, same initial noise per column
-    tables/text8_samples.tex     one 64-char MDLM sample per optimizer
-    tables/qm9_samples.tex       three SMILES per optimizer + validity
+Writes into the Overleaf checkout: figures/celeba_samples.pdf (7x4 face grid,
+same noise per column), tables/text8_samples.tex, tables/qm9_samples.tex,
+tables/qm9_quality.tex (validity/uniqueness over 1024 molecules).
 
     uv run python scripts/paper_samples.py <overleaf_dir> [--gpu 3]
 """
@@ -116,7 +115,9 @@ def text8(out_tex, device):
     out_tex.write_text("\n".join(L) + "\n")
 
 
-def qm9(out_tex, device):
+def qm9(out_tex, quality_tex, device):
+    """Sample molecules per optimizer: a few SMILES for the appendix, and a
+    validity/uniqueness table (n=1024, fixed seed) for the results."""
     import torch
     from src.diffusion import udlm
     from src.models.diff_transformer import DiffTransformer
@@ -127,13 +128,16 @@ def qm9(out_tex, device):
     L = [r"\begin{tabular}{lllr}", r"\toprule",
          r"optimizer & \multicolumn{2}{l}{samples (SMILES)} & valid \\",
          r"\midrule"]
+    Q = [r"\begin{tabular}{lrr}", r"\toprule",
+         r"optimizer & valid $\uparrow$ & unique $\uparrow$ \\",
+         r"\midrule"]
     for opt in OPTS:
         ckpt = Path("exps_bench/qm9", opt, f"seed{SEED}", "ckpt.pt")
         model = DiffTransformer(vocab_size=tok.vocab_size, block_size=32,
                                 n_layer=12, n_head=12, d_model=768).to(device)
         load(ckpt, model, device)
         torch.manual_seed(SEED)
-        ids = udlm.sample(model, n_samples=128, length=32, n_steps=128,
+        ids = udlm.sample(model, n_samples=1024, length=32, n_steps=128,
                           vocab_size=tok.vocab_size, device=device)
         smiles = [tok.decode(row.tolist()) for row in ids.cpu()]
         m = mol_metrics(smiles)
@@ -142,11 +146,15 @@ def qm9(out_tex, device):
         two = [esc(x) for x in smiles[:2]]
         L.append(rf"{NAME[opt]} & \texttt{{{two[0]}}} & \texttt{{{two[1]}}}"
                  rf" & {100 * m.get('validity', 0):.0f}\% \\")
+        Q.append(rf"{NAME[opt]} & {100 * m['validity']:.1f}\%"
+                 rf" & {100 * m['uniqueness']:.1f}\% \\")
         del model
         torch.cuda.empty_cache()
-        print(f"  qm9 {opt}: valid={m.get('validity', 0):.2f}", flush=True)
+        print(f"  qm9 {opt}: {m}", flush=True)
     L += [r"\bottomrule", r"\end{tabular}"]
     out_tex.write_text("\n".join(L) + "\n")
+    Q += [r"\bottomrule", r"\end{tabular}"]
+    quality_tex.write_text("\n".join(Q) + "\n")
 
 
 def main():
@@ -163,7 +171,8 @@ def main():
     print("== text8 ==", flush=True)
     text8(out / "tables" / "text8_samples.tex", device)
     print("== qm9 ==", flush=True)
-    qm9(out / "tables" / "qm9_samples.tex", device)
+    qm9(out / "tables" / "qm9_samples.tex",
+        out / "tables" / "qm9_quality.tex", device)
     print("== celeba ==", flush=True)
     celeba(out / "figures" / "celeba_samples.pdf", device)
     print("all samples written", flush=True)
